@@ -16,7 +16,7 @@ Telegram бот для учета доходов и расходов с инте
 
 ### Требования
 
-- Python 3.11+
+- Python 3.12+
 - [uv](https://github.com/astral-sh/uv) - менеджер зависимостей
 
 ### Шаги установки
@@ -88,7 +88,7 @@ Telegram бот для учета доходов и расходов с инте
    OPENAI_API_KEY=ваш_ключ_от_OpenRouter
    OPENAI_BASE_URL=https://openrouter.ai/api/v1
    MODEL_TEXT=openai/gpt-oss-20b:free
-   MODEL_IMAGE=meta-llama/llama-3.2-11b-vision-instruct
+   MODEL_IMAGE=qwen/qwen2.5-vl-32b-instruct
    MODEL_AUDIO=openai/gpt-audio-mini
    ```
 
@@ -97,9 +97,9 @@ Telegram бот для учета доходов и расходов с инте
    TELEGRAM_TOKEN=ваш_токен_от_BotFather
    OPENAI_API_KEY=ollama
    OPENAI_BASE_URL=http://localhost:11434/v1
-   MODEL_TEXT=llama3.2
-   MODEL_IMAGE=llama3.2-vision
-   # MODEL_AUDIO не используется: Ollama не поддерживает транскрибацию аудио.
+   MODEL_TEXT=gpt-oss:20b
+   MODEL_IMAGE=qwen3-vl:8b-instruct
+   # MODEL_AUDIO не используется: Ollama не поддерживает audio input.
    # Голосовые сообщения доступны только через OpenRouter/OpenAI.
    ```
 
@@ -110,7 +110,10 @@ Telegram бот для учета доходов и расходов с инте
 - `OPENAI_BASE_URL` - URL API провайдера (по умолчанию: https://openrouter.ai/api/v1)
 - `MODEL_TEXT` - модель для обработки текстовых сообщений
 - `MODEL_IMAGE` - модель для обработки изображений (должна поддерживать vision)
-- `MODEL_AUDIO` - модель для транскрибации голосовых сообщений (по умолчанию `openai/gpt-audio-mini`, работает только через провайдеры с поддержкой audio input)
+- `MODEL_AUDIO` - модель для транскрибации голосовых сообщений (работает только через провайдеры с поддержкой audio input)
+- `PROXY_URL` - SOCKS5 прокси для Telegram API (опционально, пример: `socks5://user:password@host:port`)
+- `SYSTEM_PROMPT_PATH` - путь к файлу с системным промптом (по умолчанию: `prompts/system_prompt.txt`)
+- `SYSTEM_PROMPT` - альтернатива: системный промпт напрямую в переменной окружения (опционально)
 
 ## Запуск
 
@@ -187,19 +190,24 @@ make run
 
 ```
 ├── src/
-│   ├── bot.py          # Точка входа, инициализация
-│   ├── config.py       # Загрузка конфигурации
-│   ├── handlers.py     # Обработчики сообщений и команд
-│   ├── llm.py          # Интеграция с LLM
-│   └── models.py       # Pydantic модели для транзакций
+│   ├── audio_converter.py    # Конвертация аудио (OGG → WAV)
+│   ├── bot.py                # Точка входа, инициализация
+│   ├── config.py             # Загрузка конфигурации
+│   ├── conversation_store.py # Хранение истории диалогов
+│   ├── exceptions.py         # Доменные исключения
+│   ├── finance_service.py    # Бизнес-логика (извлечение, баланс)
+│   ├── handlers.py           # Обработчики сообщений и команд
+│   ├── llm_client.py         # Интеграция с LLM
+│   ├── models.py             # Pydantic модели для транзакций
+│   ├── report_formatter.py   # Форматирование отчётов
+│   └── transaction_store.py  # Хранение транзакций
 ├── prompts/
-│   ├── system_prompt_text.txt   # Системный промпт для текстовых сообщений
-│   └── system_prompt_image.txt  # Системный промпт для изображений
-├── .env                # Конфигурация (не коммитится)
-├── .env.example        # Пример конфигурации
-├── Makefile            # Команды для работы
-├── pyproject.toml      # Зависимости проекта
-└── README.md           # Документация
+│   └── system_prompt.txt     # Единый системный промпт
+├── .env                      # Конфигурация (не коммитится)
+├── .env.example              # Пример конфигурации
+├── Makefile                  # Команды для работы
+├── pyproject.toml            # Зависимости проекта
+└── README.md                 # Документация
 ```
 
 ### Команды Makefile

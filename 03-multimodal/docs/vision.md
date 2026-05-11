@@ -3,10 +3,10 @@
 ## Технологии
 
 **Основные технологии:**
-- **Python 3.11+** - основной язык разработки
+- **Python 3.12** - основной язык разработки
 - **uv** - управление зависимостями и виртуальным окружением
 - **aiogram 3.x** - фреймворк для Telegram Bot API (polling)
-- **openai** - клиент для работы с LLM через OpenRouter/Ollama (единый интерфейс, включая audio transcriptions для whisper-1)
+- **openai** - клиент для работы с LLM через OpenRouter/Ollama (единый интерфейс, включая audio input через `chat.completions.create` для транскрибации)
 - **pydantic** - валидация данных и structured output для LLM
 - **python-dotenv** - для работы с переменными окружения
 - **Make** - автоматизация сборки и запуска
@@ -31,22 +31,27 @@
 ```
 /
 ├── src/
-│   ├── bot.py          # Основной файл бота, инициализация aiogram
-│   ├── handlers.py     # Обработчики команд и сообщений Telegram
-│   ├── llm.py          # Работа с LLM через OpenRouter/Ollama
-│   ├── models.py       # Pydantic модели для транзакций
-│   └── config.py       # Загрузка конфигурации из .env
+│   ├── audio_converter.py    # Конвертация аудио (OGG → WAV)
+│   ├── bot.py                # Основной файл бота, инициализация aiogram
+│   ├── config.py             # Загрузка конфигурации из .env (Settings dataclass)
+│   ├── conversation_store.py # Хранение истории диалогов в памяти
+│   ├── exceptions.py         # Доменные исключения (LLMError, AudioError, ConfigError)
+│   ├── finance_service.py    # Бизнес-логика (извлечение транзакций, баланс)
+│   ├── handlers.py           # Обработчики команд и сообщений Telegram
+│   ├── llm_client.py         # Работа с LLM через OpenRouter/Ollama
+│   ├── models.py             # Pydantic модели для транзакций
+│   ├── report_formatter.py   # Форматирование отчётов (баланс, транзакции)
+│   └── transaction_store.py  # Хранение транзакций в памяти
 ├── prompts/
-│   ├── system_prompt_text.txt   # Системный промпт для текстовых сообщений
-│   └── system_prompt_image.txt  # Системный промпт для изображений
-├── .env                # Переменные окружения (токены, настройки)
-├── .env.example        # Пример конфигурации
-├── pyproject.toml      # Конфигурация проекта для uv
-├── Makefile            # Команды для запуска и управления
-└── README.md           # Документация по запуску
+│   └── system_prompt.txt     # Единый системный промпт (текст + изображения)
+├── .env                      # Переменные окружения (токены, настройки)
+├── .env.example              # Пример конфигурации
+├── pyproject.toml            # Конфигурация проекта для uv
+├── Makefile                  # Команды для запуска и управления
+└── README.md                 # Документация по запуску
 ```
 
-**Принцип:** Всего 5 Python-файлов в одной папке `src/`. Никаких пакетов, подпакетов, сложной иерархии.
+**Принцип:** Всего 10 Python-файлов в одной папке `src/`. Каждый класс — отдельный файл. Простой OOP без сложной иерархии.
 
 ## Архитектура проекта
 
@@ -62,16 +67,16 @@
    - `/balance` - отчет о балансе и статистике
    - Обработчик текстовых сообщений → извлечение транзакций через LLM → сохранение транзакций → показ ответа + статус + баланс
    - Обработчик изображений → извлечение транзакций через VLM → сохранение транзакций → показ ответа + статус + баланс
-   - Обработчик голосовых сообщений → скачивание ogg → транскрибация через whisper-1 → распознанный текст передаётся в существующий текстовый пайплайн
-   - Хранит историю диалогов в памяти: `dict[int, list]` (chat_id → список сообщений)
-   - Хранит транзакции в памяти: `dict[int, list[Transaction]]` (chat_id → список транзакций)
+   - Обработчик голосовых сообщений → скачивание ogg → конвертация в WAV → транскрибация через chat.completions.create с input_audio → распознанный текст передаётся в существующий текстовый пайплайн
+   - Хранит историю диалогов в памяти: `ConversationStore` (chat_id → список сообщений)
+   - Хранит транзакции в памяти: `TransactionStore` (chat_id → список транзакций)
 
-3. **llm.py** - интеграция с LLM
-   - Метод `get_transaction_response_text()` - обработка текстовых сообщений со structured output
-   - Метод `get_transaction_response_image()` - обработка изображений (VLM) со structured output
-   - Метод `transcribe_audio()` - транскрибация аудио через `client.audio.transcriptions.create` (whisper-1 через OpenRouter)
+3. **llm_client.py** - интеграция с LLM
+   - Метод `extract_from_text()` - обработка текстовых сообщений со structured output
+   - Метод `extract_from_image()` - обработка изображений (VLM) со structured output
+   - Метод `transcribe_audio()` - транскрибация аудио через `chat.completions.create` с `input_audio`
    - Единый интерфейс через AsyncOpenAI для OpenRouter и Ollama
-   - Переключение между внешними и локальными моделями через конфигурацию (аудио-эндпоинт — только OpenRouter/OpenAI-совместимые)
+   - Переключение между внешними и локальными моделями через конфигурацию
 
 4. **models.py** - модели данных
    - Pydantic модели для транзакций (Transaction, TransactionResponse)
@@ -79,41 +84,41 @@
    - Валидация данных транзакций
 
 5. **config.py** - конфигурация
-   - Класс Config с полями: `TELEGRAM_TOKEN`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `MODEL_TEXT`, `MODEL_IMAGE`, `MODEL_AUDIO`, `SYSTEM_PROMPT_TEXT`, `SYSTEM_PROMPT_IMAGE`
-   - Загрузка промптов из файлов (`prompts/system_prompt_text.txt`, `prompts/system_prompt_image.txt`) или переменных окружения
-   - Пути к файлам промптов можно задать через `SYSTEM_PROMPT_TEXT_PATH` и `SYSTEM_PROMPT_IMAGE_PATH` в .env
-   - Загрузка из .env через python-dotenv
-   - `MODEL_TEXT` - модель для текстовых сообщений, `MODEL_IMAGE` - модель для изображений (vision), `MODEL_AUDIO` - модель для транскрибации (whisper-1)
+   - Иммутабельный `Settings` dataclass (`frozen=True, slots=True`) с fail-fast валидацией
+   - Поля: `telegram_token`, `openai_api_key`, `openai_base_url`, `model_text`, `model_image`, `model_audio`, `system_prompt`, `proxy_url`
+   - Единый системный промпт (`system_prompt`) — загружается из файла (`SYSTEM_PROMPT_PATH`) или переменной окружения (`SYSTEM_PROMPT`)
+   - `_require()` для обязательных параметров, `_load_prompt()` для гибкой загрузки промпта
+   - `model_text` — модель для текстовых сообщений, `model_image` — модель для изображений (vision), `model_audio` — модель для транскрибации
 
 **Поток данных (текстовые сообщения):**
 ```
-Telegram → handlers.py (последнее сообщение) → llm.py (structured output) → OpenRouter/Ollama → 
-llm.py → handlers.py (извлечь транзакции, сохранить в transactions, показать ответ + статус + баланс) → Telegram
+Telegram → handlers.py (последнее сообщение) → finance_service.py (structured output) → llm_client.py → OpenRouter/Ollama → 
+finance_service.py → handlers.py (извлечь транзакции, сохранить в transactions, показать ответ + статус + баланс) → Telegram
 ```
 
 **Поток данных (изображения):**
 ```
-Telegram → handlers.py (изображение → base64) → llm.py (VLM + structured output) → OpenRouter/Ollama → 
-llm.py → handlers.py (извлечь транзакции, сохранить в transactions, показать ответ + статус + баланс) → Telegram
+Telegram → handlers.py (изображение → base64) → finance_service.py (VLM + structured output) → llm_client.py → OpenRouter/Ollama → 
+finance_service.py → handlers.py (извлечь транзакции, сохранить в transactions, показать ответ + статус + баланс) → Telegram
 ```
 
 **Поток данных (голосовые сообщения):**
 ```
-Telegram → handlers.py (скачать ogg) → llm.py.transcribe_audio() → OpenRouter (whisper-1) → текст →
-handlers.py (показать распознанный текст) → llm.py.get_transaction_response_text() → извлечь транзакции + ответ + баланс → Telegram
+Telegram → handlers.py (скачать ogg, конвертировать в WAV) → llm_client.py.transcribe_audio() → OpenRouter (chat.completions.create с input_audio) → текст →
+handlers.py (показать распознанный текст) → finance_service.process_text_message() → извлечь транзакции + ответ + баланс → Telegram
 ```
 
-**Принцип:** Никакой DI, никаких интерфейсов, никаких слоев абстракции. Просто прямые вызовы функций.
+**Принцип:** Простой OOP с внедрением зависимостей через конструктор. Handler → FinanceService → LLMClient.
 
 ## Модель данных
 
 **Хранение в памяти (без БД):**
 
-Глобальные словари в `handlers.py`:
-```python
-chat_conversations: dict[int, list[dict]] = {}  # история диалогов (для контекста)
-transactions: dict[int, list[Transaction]] = {}  # транзакции пользователей
-```
+Отдельные классы-хранилища в `src/`:
+- `ConversationStore` — история диалогов: `dict[int, list[dict]]` (chat_id → список сообщений)
+- `TransactionStore` — транзакции пользователей: `dict[int, list[Transaction]]` (chat_id → список транзакций)
+
+Хранилища внедряются через конструктор в `FinanceService` и `handlers`.
 
 **Структура истории диалога:**
 ```python
@@ -196,25 +201,27 @@ from openai import AsyncOpenAI
 
 # Единый интерфейс для OpenRouter и Ollama
 # Переключение моделей через изменение base_url и model в .env
+# LLMClient получает Settings через конструктор
 client = AsyncOpenAI(
-    api_key=config.OPENAI_API_KEY,  # для Ollama можно использовать любое значение
-    base_url=config.OPENAI_BASE_URL  # https://openrouter.ai/api/v1 или http://localhost:11434/v1
+    api_key=settings.openai_api_key,  # для Ollama можно использовать любое значение
+    base_url=settings.openai_base_url  # https://openrouter.ai/api/v1 или http://localhost:11434/v1
 )
 ```
 
-**Методы в llm.py:**
+**Методы в llm_client.py (класс LLMClient):**
 
 **1. Обработка текстовых сообщений:**
 ```python
-async def get_transaction_response_text(
+async def extract_from_text(
+    self,
     last_message: str,
     message_history: list[dict]
 ) -> TransactionResponse:
     # Structured output через response_format с JSON schema из Pydantic
-        response = await client.chat.completions.create(
-        model=config.MODEL,
+    response = await self._client.chat.completions.create(
+        model=self._settings.model_text,
         messages=[
-            {"role": "system", "content": config.SYSTEM_PROMPT_TEXT},
+            {"role": "system", "content": self._settings.system_prompt},
             *message_history[-10:],  # последние 10 сообщений для контекста
             {"role": "user", "content": last_message}
         ],
@@ -230,15 +237,16 @@ async def get_transaction_response_text(
 
 **2. Обработка изображений (VLM):**
 ```python
-async def get_transaction_response_image(
+async def extract_from_image(
+    self,
     image_base64: str,
     message_history: list[dict]
 ) -> TransactionResponse:
     # Vision API с structured output
-        response = await client.chat.completions.create(
-        model=config.MODEL,
+    response = await self._client.chat.completions.create(
+        model=self._settings.model_image,
         messages=[
-            {"role": "system", "content": config.SYSTEM_PROMPT_IMAGE},
+            {"role": "system", "content": self._settings.system_prompt},
             *message_history[-10:],
             {
                 "role": "user",
@@ -257,53 +265,62 @@ async def get_transaction_response_image(
     return TransactionResponse.model_validate_json(response.choices[0].message.content)
 ```
 
-**3. Транскрибация голосовых сообщений (whisper-1):**
+**3. Транскрибация голосовых сообщений (audio input):**
 ```python
 async def transcribe_audio(
+    self,
     audio_bytes: bytes,
-    filename: str = "voice.ogg"
+    filename: str = "voice.wav"
 ) -> str:
-    # Простой вызов audio transcriptions
-    response = await client.audio.transcriptions.create(
-        model=config.MODEL_AUDIO,      # по умолчанию "openai/whisper-1"
-        file=(filename, audio_bytes),
+    # Транскрибация через chat.completions.create с input_audio
+    audio_base64 = base64.b64encode(audio_bytes).decode()
+    response = await self._client.chat.completions.create(
+        model=self._settings.model_audio,
+        messages=[
+            {"role": "user", "content": [
+                {"type": "input_audio", "input_audio": {
+                    "data": audio_base64,
+                    "format": "wav"
+                }},
+                {"type": "text", "text": "Транскрибируй это аудио"}
+            ]}
+        ]
     )
-    return response.text
+    return response.choices[0].message.content
 ```
 
 **Важные особенности:**
 - **Structured output**: Использование Pydantic моделей для валидации ответов LLM через `response_format` с JSON schema
-- **Извлечение транзакций**: ТОЛЬКО из последнего сообщения пользователя (не из всей истории) - подчеркнуто в системных промптах
-- **Переключение моделей**: Единый интерфейс через AsyncOpenAI, переключение через изменение `OPENAI_BASE_URL` и `MODEL` в .env файле
+- **Извлечение транзакций**: ТОЛЬКО из последнего сообщения пользователя (не из всей истории) - подчеркнуто в системном промпте
+- **Переключение моделей**: Единый интерфейс через AsyncOpenAI, переключение через изменение `OPENAI_BASE_URL` и переменных `MODEL_*` в .env файле
 
 **Параметры из .env:**
 - `OPENAI_API_KEY` - ключ от OpenRouter (для Ollama можно любое значение)
 - `OPENAI_BASE_URL` - URL API провайдера:
   - Для OpenRouter: `https://openrouter.ai/api/v1`
   - Для Ollama: `http://localhost:11434/v1`
-- `MODEL_TEXT` - модель для обработки текстовых сообщений (например `openai/gpt-oss-20b:free` для OpenRouter или `llama3.2` для Ollama)
-- `MODEL_IMAGE` - модель для обработки изображений, должна поддерживать vision (например `meta-llama/llama-3.2-11b-vision-instruct` для OpenRouter или `llama3.2-vision` для Ollama)
-- `MODEL_AUDIO` - модель для транскрибации голосовых сообщений (по умолчанию `openai/whisper-1`; доступна только на OpenAI-совместимых провайдерах, таких как OpenRouter)
-- `SYSTEM_PROMPT_TEXT_PATH` - путь к файлу с системным промптом для текстовых сообщений (по умолчанию: `prompts/system_prompt_text.txt`)
-- `SYSTEM_PROMPT_IMAGE_PATH` - путь к файлу с системным промптом для изображений (по умолчанию: `prompts/system_prompt_image.txt`)
-- `SYSTEM_PROMPT_TEXT` - альтернатива: системный промпт для текстовых сообщений напрямую (если указан, используется вместо файла)
-- `SYSTEM_PROMPT_IMAGE` - альтернатива: системный промпт для изображений напрямую (если указан, используется вместо файла)
+- `MODEL_TEXT` - модель для обработки текстовых сообщений (например `openai/gpt-oss-20b:free` для OpenRouter или `gpt-oss:20b` для Ollama)
+- `MODEL_IMAGE` - модель для обработки изображений, должна поддерживать vision (например `qwen/qwen2.5-vl-32b-instruct` для OpenRouter или `qwen3-vl:8b-instruct` для Ollama)
+- `MODEL_AUDIO` - модель для транскрибации голосовых сообщений (например `openai/gpt-audio-mini`; доступна только на OpenAI-совместимых провайдерах, таких как OpenRouter)
+- `SYSTEM_PROMPT_PATH` - путь к файлу с единым системным промптом (по умолчанию: `prompts/system_prompt.txt`)
+- `SYSTEM_PROMPT` - альтернатива: системный промпт напрямую (если указан, используется вместо файла)
+- `PROXY_URL` - SOCKS5 прокси для Telegram API (опционально)
 
 **Переключение между провайдерами:**
 Для использования OpenRouter:
 ```bash
 OPENAI_BASE_URL=https://openrouter.ai/api/v1
 MODEL_TEXT=openai/gpt-oss-20b:free
-MODEL_IMAGE=meta-llama/llama-3.2-11b-vision-instruct
-MODEL_AUDIO=openai/whisper-1
+MODEL_IMAGE=qwen/qwen2.5-vl-32b-instruct
+MODEL_AUDIO=openai/gpt-audio-mini
 ```
 
 Для использования Ollama:
 ```bash
 OPENAI_BASE_URL=http://localhost:11434/v1
-MODEL_TEXT=llama3.2
-MODEL_IMAGE=llama3.2-vision
-# MODEL_AUDIO не используется: Ollama не поддерживает audio transcriptions эндпоинт.
+MODEL_TEXT=gpt-oss:20b
+MODEL_IMAGE=qwen3-vl:8b-instruct
+# MODEL_AUDIO не используется: Ollama не поддерживает audio input.
 # Обработка голосовых сообщений доступна только при работе через OpenRouter/OpenAI.
 ```
 
@@ -314,89 +331,11 @@ MODEL_IMAGE=llama3.2-vision
 
 **Принцип:** Асинхронный запрос-ответ с structured output. Никакого retry, никаких очередей, никакого streaming.
 
-## Системные промпты
+## Системный промпт
 
-Промпты хранятся в файлах `prompts/system_prompt_text.txt` и `prompts/system_prompt_image.txt` для удобства чтения и редактирования. Пути к файлам можно настроить через переменные окружения `SYSTEM_PROMPT_TEXT_PATH` и `SYSTEM_PROMPT_IMAGE_PATH`.
+Промпт хранится в файле `prompts/system_prompt.txt` — единый для текста и изображений (DRY). Путь к файлу можно настроить через переменную окружения `SYSTEM_PROMPT_PATH`, либо задать промпт напрямую через `SYSTEM_PROMPT`.
 
-**Для текстовых сообщений** (`prompts/system_prompt_text.txt`):
-```
-Ты персональный финансовый советник. Помогаешь пользователю вести учет доходов и расходов.
-
-ВАЖНО: Транзакции извлекай ТОЛЬКО из последнего сообщения пользователя. Не используй информацию из предыдущих сообщений для создания транзакций.
-
-НО: Для ответов на вопросы пользователя используй ВСЮ историю диалога! Если пользователь спрашивает про прошлые транзакции, события или информацию из истории - отвечай используя контекст предыдущих сообщений.
-
-Твоя задача:
-1. Извлечь финансовые транзакции из последнего сообщения пользователя (ТОЛЬКО из последнего!)
-2. Для каждой транзакции создать объект со следующими полями (используй ТОЧНО эти названия полей на английском):
-   - "date" (обязательно, формат YYYY-MM-DD строкой, используй сегодняшнюю дату если не указана)
-   - "time" (если указано время, формат HH:MM:SS строкой, иначе null)
-   - "type" (обязательно, строка: "income" для дохода или "expense" для расхода)
-   - "amount" (обязательно, положительное число float, например 1500.0)
-   - "frequency" (обязательно, строка: "daily" для повседневных, "periodic" для периодических, "one_time" для разовых)
-   - "category" (обязательно, строка на русском: продукты, рестораны, такси, транспорт, образование, путешествия, развлечения, здоровье, одежда, другие или новая категория по смыслу)
-   - "description" (строка, подробная информация о товарах, услугах, источнике дохода, контрагенте и т.п., может быть пустой "")
-3. Дать дружелюбный ответ пользователю в поле "answer":
-   - Если пользователь задает вопрос - отвечай используя историю диалога
-   - Если пользователь упоминает что-то из прошлого - используй информацию из истории для ответа
-   - Если пользователь просто сообщает о транзакции - дай соответствующий комментарий
-
-Категории: продукты, рестораны, такси, транспорт, образование, путешествия, развлечения, здоровье, одежда, другие. Можешь предлагать новые категории, если они подходят лучше.
-
-КРИТИЧЕСКИ ВАЖНО: Если в сообщении есть упоминание суммы денег (рублей, рублей, руб.) и что было куплено/продано/получено/потрачено - это ТРАНЗАКЦИЯ и её ОБЯЗАТЕЛЬНО нужно извлечь!
-
-Пример правильного JSON ответа для сообщения "сегодня купил продукты на 1500 рублей":
-{
-  "transactions": [
-    {
-      "date": "2024-10-30",
-      "time": null,
-      "type": "expense",
-      "amount": 1500.0,
-      "frequency": "daily",
-      "category": "продукты",
-      "description": "Покупка продуктов на сумму 1500 рублей"
-    }
-  ],
-  "answer": "Записал ваш расход на продукты в размере 1500 рублей."
-}
-
-Пример: Если пользователь ранее сообщил "Поел шаверму на 800р", а потом спрашивает "Чтото ел вкусное недавно. Что это было?" - ответь используя историю: "Вы недавно ели шаверму на 800 рублей."
-
-Твой ответ должен быть в формате JSON с двумя полями:
-- "transactions" - массив транзакций (обязательно, даже если пустой [])
-- "answer" - текстовый ответ пользователю (обязательно), используй историю диалога для ответов на вопросы
-
-Если в сообщении нет информации о транзакциях, верни пустой массив transactions [], но все равно дай полезный ответ пользователю используя историю диалога если это уместно.
-```
-
-**Для изображений** (`prompts/system_prompt_image.txt`):
-```
-Ты персональный финансовый советник. Помогаешь пользователю вести учет доходов и расходов.
-
-ВАЖНО: Транзакции извлекай ТОЛЬКО из присланного изображения (чека, скриншота). Не используй информацию из предыдущих сообщений для создания транзакций.
-
-Твоя задача:
-1. Распознать текст на изображении (OCR)
-2. Извлечь финансовые транзакции из изображения (чеки, выписки, скриншоты платежей)
-3. Для каждой транзакции создать объект со следующими полями (используй ТОЧНО эти названия полей на английском):
-   - "date" (обязательно, формат YYYY-MM-DD строкой)
-   - "time" (если указано на изображении, формат HH:MM:SS строкой, иначе null)
-   - "type" (обязательно, строка: "income" для дохода или "expense" для расхода)
-   - "amount" (обязательно, положительное число float)
-   - "frequency" (обязательно, строка: "daily" для повседневных, "periodic" для периодических, "one_time" для разовых)
-   - "category" (обязательно, строка на русском: продукты, рестораны, такси, транспорт, образование, путешествия, развлечения, здоровье, одежда, другие или новая категория по смыслу)
-   - "description" (строка, подробная информация о товарах, услугах, источнике дохода, контрагенте и т.п., может быть пустой "")
-4. Дать краткий комментарий о найденных транзакциях в поле "answer"
-
-Категории: продукты, рестораны, такси, транспорт, образование, путешествия, развлечения, здоровье, одежда, другие. Можешь предлагать новые категории, если они подходят лучше.
-
-Твой ответ должен быть в формате JSON с двумя полями:
-- "transactions" - массив транзакций (обязательно, даже если пустой [])
-- "answer" - текстовый ответ пользователю (обязательно)
-
-Если на изображении нет информации о транзакциях, верни пустой массив transactions [], но подтверди, что обработал изображение.
-```
+Полный текст промпта — см. `prompts/system_prompt.txt`.
 
 ## Сценарии работы
 
@@ -443,10 +382,11 @@ MODEL_IMAGE=llama3.2-vision
 **Сценарий 6: Обработка голосового сообщения**
 1. Пользователь отправляет голосовое сообщение (ogg/opus)
 2. Бот скачивает аудиофайл через Telegram API
-3. Бот вызывает `llm.transcribe_audio()` → whisper-1 возвращает распознанный текст
-4. Бот показывает пользователю распознанный текст (для прозрачности)
-5. Далее используется существующий текстовый пайплайн: извлечение транзакций + ответ + баланс (как в Сценарии 2)
-6. Если провайдер — Ollama, бот отвечает пользователю, что голосовые сообщения не поддерживаются
+3. `audio_converter` конвертирует аудио в WAV (через ffmpeg)
+4. Бот вызывает `llm_client.transcribe_audio()` → `chat.completions.create` с `input_audio` возвращает распознанный текст
+5. Бот показывает пользователю распознанный текст (для прозрачности)
+6. Далее используется существующий текстовый пайплайн: `finance_service.process_text_message()` → извлечение транзакций + ответ + баланс (как в Сценарии 2)
+7. Если провайдер — Ollama, бот отвечает пользователю, что голосовые сообщения не поддерживаются
 
 **Ограничения:**
 - Бот обрабатывает текст, изображения и голосовые сообщения (не PDF, не видео, не файлы других форматов)
@@ -462,31 +402,33 @@ TELEGRAM_TOKEN=your_telegram_bot_token
 OPENAI_API_KEY=your_openrouter_api_key
 OPENAI_BASE_URL=https://openrouter.ai/api/v1
 MODEL_TEXT=openai/gpt-oss-20b:free
-MODEL_IMAGE=meta-llama/llama-3.2-11b-vision-instruct
-MODEL_AUDIO=openai/whisper-1
-SYSTEM_PROMPT_TEXT_PATH=prompts/system_prompt_text.txt
-SYSTEM_PROMPT_IMAGE_PATH=prompts/system_prompt_image.txt
+MODEL_IMAGE=qwen/qwen2.5-vl-32b-instruct
+MODEL_AUDIO=openai/gpt-audio-mini
+SYSTEM_PROMPT_PATH=prompts/system_prompt.txt
 ```
 
 **Файл .env.example** (коммитится):
 ```bash
 TELEGRAM_TOKEN=
-OPENAI_API_KEY=
+OPENAI_API_KEY=sk-...
 OPENAI_BASE_URL=https://openrouter.ai/api/v1
 MODEL_TEXT=openai/gpt-oss-20b:free
-MODEL_IMAGE=meta-llama/llama-3.2-11b-vision-instruct
-MODEL_AUDIO=openai/whisper-1
-SYSTEM_PROMPT_TEXT_PATH=prompts/system_prompt_text.txt
-SYSTEM_PROMPT_IMAGE_PATH=prompts/system_prompt_image.txt
+MODEL_IMAGE=qwen/qwen2.5-vl-32b-instruct
+MODEL_AUDIO=openai/gpt-audio-mini
 
-# Альтернативно: можно переопределить промпты напрямую через переменные окружения
-# SYSTEM_PROMPT_TEXT=
-# SYSTEM_PROMPT_IMAGE=
+# System Prompt
+SYSTEM_PROMPT_PATH=prompts/system_prompt.txt
+# Альтернативно: можно переопределить промпт напрямую
+# SYSTEM_PROMPT=
+
+# SOCKS5 Proxy (опционально)
+# PROXY_URL=socks5://user:password@host:port
 ```
 
 **config.py:**
 ```python
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -494,50 +436,70 @@ load_dotenv()
 
 PROJECT_ROOT = Path(__file__).parent.parent
 
-def load_prompt(prompt_file_path: str, env_var: str = None) -> str:
-    """Загружает промпт из файла или переменной окружения."""
-    # Сначала пробуем загрузить из переменной окружения напрямую
+
+def _load_prompt(file_path: str, env_var: str | None = None) -> str:
+    """Возвращает текст промпта: сначала из переменной окружения, затем из файла."""
     if env_var:
-        env_value = os.getenv(env_var)
-        if env_value:
-            return env_value
-    
-    # Если переменной нет, пробуем загрузить из файла
-    prompt_path = PROJECT_ROOT / prompt_file_path if not os.path.isabs(prompt_file_path) else Path(prompt_file_path)
-    if prompt_path.exists():
-        return prompt_path.read_text(encoding="utf-8").strip()
-    
+        value = os.getenv(env_var)
+        if value:
+            return value
+    path = Path(file_path)
+    if not path.is_absolute():
+        path = PROJECT_ROOT / path
+    if path.exists():
+        return path.read_text(encoding="utf-8").strip()
     return ""
 
-class Config:
-    TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-    OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1")
-    MODEL_TEXT = os.getenv("MODEL_TEXT", os.getenv("MODEL"))  # Для обратной совместимости
-    MODEL_IMAGE = os.getenv("MODEL_IMAGE")
-    MODEL_AUDIO = os.getenv("MODEL_AUDIO", "openai/whisper-1")
-    SYSTEM_PROMPT_TEXT = load_prompt(
-        os.getenv("SYSTEM_PROMPT_TEXT_PATH", "prompts/system_prompt_text.txt"),
-        "SYSTEM_PROMPT_TEXT"
-    )
-    SYSTEM_PROMPT_IMAGE = load_prompt(
-        os.getenv("SYSTEM_PROMPT_IMAGE_PATH", "prompts/system_prompt_image.txt"),
-        "SYSTEM_PROMPT_IMAGE"
-    )
 
-config = Config()
+def _require(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        raise ConfigError(f"Missing required environment variable: {name}")
+    return value
+
+
+@dataclass(frozen=True, slots=True)
+class Settings:
+    telegram_token: str
+    openai_api_key: str
+    openai_base_url: str
+    model_text: str
+    model_image: str | None
+    model_audio: str
+    system_prompt: str
+    proxy_url: str | None
+
+    @classmethod
+    def load(cls) -> "Settings":
+        model_text = os.getenv("MODEL_TEXT") or os.getenv("MODEL")
+        if not model_text:
+            raise ConfigError("Missing required environment variable: MODEL_TEXT")
+
+        return cls(
+            telegram_token=_require("TELEGRAM_TOKEN"),
+            openai_api_key=_require("OPENAI_API_KEY"),
+            openai_base_url=os.getenv("OPENAI_BASE_URL", "https://openrouter.ai/api/v1"),
+            model_text=model_text,
+            model_image=os.getenv("MODEL_IMAGE"),
+            model_audio=os.getenv("MODEL_AUDIO", "openai/whisper-1"),
+            system_prompt=_load_prompt(
+                os.getenv("SYSTEM_PROMPT_PATH", "prompts/system_prompt.txt"),
+                "SYSTEM_PROMPT",
+            ),
+            proxy_url=os.getenv("PROXY_URL"),
+        )
 ```
 
-**Принцип загрузки промптов:**
-1. Приоритет 1: Переменные окружения `SYSTEM_PROMPT_TEXT`/`SYSTEM_PROMPT_IMAGE` (если указаны напрямую)
-2. Приоритет 2: Файлы по путям из `SYSTEM_PROMPT_TEXT_PATH`/`SYSTEM_PROMPT_IMAGE_PATH`
-3. По умолчанию: `prompts/system_prompt_text.txt` и `prompts/system_prompt_image.txt`
+**Принцип загрузки промпта:**
+1. Приоритет 1: Переменная окружения `SYSTEM_PROMPT` (если указана напрямую)
+2. Приоритет 2: Файл по пути из `SYSTEM_PROMPT_PATH`
+3. По умолчанию: `prompts/system_prompt.txt`
 
 **Принципы:**
 - Все секреты только в .env
 - Нет YAML, JSON, TOML конфигов
 - Нет окружений (dev/prod)
-- Нет валидации на старте (упадет при первом использовании если что-то не так)
+- Fail-fast валидация на старте: `_require()` бросает `ConfigError` если обязательная переменная не задана
 
 ## Подход к логгированию
 
