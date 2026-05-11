@@ -5,7 +5,7 @@ from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message
 from openai import APIError, InternalServerError, NotFoundError
-from llm import get_transaction_response_text, get_transaction_response_image, get_transaction_response_audio, transcribe_audio
+from llm import get_transaction_response_text, get_transaction_response_image, transcribe_audio
 from models import Transaction
 from config import config
 
@@ -275,7 +275,7 @@ async def handle_voice(message: Message):
     # Инициализируем историю если её нет
     if chat_id not in chat_conversations:
         chat_conversations[chat_id] = [
-            {"role": "system", "content": config.SYSTEM_PROMPT_AUDIO}
+            {"role": "system", "content": config.SYSTEM_PROMPT_TEXT}
         ]
 
     try:
@@ -297,9 +297,9 @@ async def handle_voice(message: Message):
         # Показываем пользователю распознанный текст
         await message.answer(f"🎤 Распознано: {recognized_text}")
 
-        # Дальше — пайплайн обработки аудио
+        # Дальше — существующий текстовый пайплайн
         message_history = chat_conversations[chat_id][1:] if chat_conversations[chat_id] else []
-        response = await get_transaction_response_audio(recognized_text, message_history)
+        response = await get_transaction_response_text(recognized_text, message_history)
 
         logger.info(
             f"LLM response for voice from {chat_id}: answer='{response.answer[:200]}...', "

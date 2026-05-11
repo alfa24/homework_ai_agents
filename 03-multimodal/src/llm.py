@@ -80,17 +80,88 @@ async def transcribe_audio(
     audio_bytes: bytes,
     filename: str = "voice.ogg"
 ) -> str:
-    """Транскрибация голосового сообщения через whisper-1 (OpenRouter/OpenAI)."""
+    """Транскрибация голосового сообщения через RouterAI chat completions API."""
     try:
+        import base64
+        import subprocess
+        import tempfile
+        import os
+        
+        # Определяем формат из расширения файла
+        ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else 'ogg'
+        
         logger.info(
             f"Transcribing audio: filename={filename}, size={len(audio_bytes)} bytes, "
-            f"model={config.MODEL_AUDIO}"
+            f"model={config.MODEL_AUDIO}, source_format={ext}"
         )
-        response = await client.audio.transcriptions.create(
+        
+        # Конвертируем в WAV если формат не поддерживается напрямую
+        # RouterAI поддерживает только 'wav' и 'mp3'
+        if ext in ('ogg', 'flac', 'm4a'):
+            logger.info(f"Converting {ext} to WAV for RouterAI compatibility")
+            with tempfile.NamedTemporaryFile(suffix='.ogg', delete=False) as src_file:
+                src_file.write(audio_bytes)
+                src_path = src_file.name
+            
+            wav_path = src_path.replace('.ogg', '.wav')
+            try:
+                # Конвертируем через ffmpeg в WAV формат
+                result = subprocess.run(
+                    [
+                        'ffmpeg', '-y', '-i', src_path,
+                        '-acodec', 'pcm_s16le',  # PCM 16-bit
+                        '-ar', '16000',           # 16kHz sample rate (оптимально для распознавания)
+                        '-ac', '1',               # mono
+                        wav_path
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+                
+                if result.returncode != 0:
+                    logger.error(f"FFmpeg conversion failed: {result.stderr}")
+                    raise RuntimeError(f"FFmpeg conversion failed: {result.stderr}")
+                
+                # Читаем сконвертированный файл
+                with open(wav_path, 'rb') as f:
+                    audio_bytes = f.read()
+                
+                audio_format = 'wav'
+                logger.info(f"Successfully converted to WAV, new size: {len(audio_bytes)} bytes")
+            finally:
+                # Чистим временные файлы
+                for path in [src_path, wav_path]:
+                    if os.path.exists(path):
+                        os.unlink(path)
+        else:
+            # Уже в поддерживаемом формате
+            audio_format = ext if ext in ('wav', 'mp3') else 'wav'
+        
+        # Кодируем аудио в base64
+        audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+        
+        # Используем chat completions API с аудио в content
+        response = await client.chat.completions.create(
             model=config.MODEL_AUDIO,
-            file=(filename, audio_bytes),
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Расшифруй этот аудиофайл. Верни только текст расшифровки без дополнительных комментариев."},
+                        {
+                            "type": "input_audio",
+                            "input_audio": {
+                                "data": audio_base64,
+                                "format": audio_format
+                            }
+                        }
+                    ]
+                }
+            ]
         )
-        text = response.text
+        
+        text = response.choices[0].message.content or ""
         logger.info(f"Transcription result (length {len(text)}): {text[:500]}")
         return text
     except (APIError, InternalServerError) as e:
@@ -98,73 +169,6 @@ async def transcribe_audio(
         raise
     except Exception as e:
         logger.error(f"Error calling transcription API: {e}", exc_info=True)
-        raise
-
-
-async def get_transaction_response_audio(
-    recognized_text: str,
-    message_history: list[dict]
-) -> TransactionResponse:
-    """Обработка распознанного текста из голосового сообщения с использованием SYSTEM_PROMPT_AUDIO."""
-    try:
-        response = await client.chat.completions.create(
-            model=config.MODEL_TEXT,
-            messages=[
-                {"role": "system", "content": config.SYSTEM_PROMPT_AUDIO},
-                *message_history[-10:],  # последние 10 сообщений для контекста
-                {"role": "user", "content": recognized_text}
-            ],
-            response_format={"type": "json_schema", "json_schema": {
-                "name": "transaction_response",
-                "schema": TransactionResponse.model_json_schema(),
-                "strict": True
-            }}
-        )
-        raw_content = response.choices[0].message.content
-        logger.info(f"Raw LLM response for audio (length: {len(raw_content) if raw_content else 0}): {raw_content[:1000] if raw_content else 'EMPTY'}")
-        
-        # Проверяем что ответ не пустой
-        if not raw_content or not raw_content.strip():
-            logger.error("LLM returned empty response for audio")
-            raise ValueError("LLM returned empty response")
-        
-        try:
-            # Парсим JSON ответ
-            import json
-            parsed_json = json.loads(raw_content)
-            
-            # Обрабатываем случай, когда поле transactions отсутствует
-            if "transactions" not in parsed_json:
-                logger.warning("Field 'transactions' missing in LLM response, adding empty list")
-                parsed_json["transactions"] = []
-            
-            # Убеждаемся, что answer есть
-            if "answer" not in parsed_json:
-                logger.warning("Field 'answer' missing in LLM response, adding default")
-                parsed_json["answer"] = "Обработал ваше голосовое сообщение."
-            
-            parsed_response = TransactionResponse.model_validate(parsed_json)
-            logger.info(f"Successfully parsed TransactionResponse for audio: transactions={len(parsed_response.transactions)}")
-            return parsed_response
-        except json.JSONDecodeError as json_error:
-            # Детальное логирование проблемы с JSON
-            logger.error(f"Failed to parse JSON from LLM response for audio: {json_error}")
-            logger.error(f"Full response content ({len(raw_content)} chars): {raw_content}")
-            logger.error(f"First 200 chars: {raw_content[:200]}")
-            logger.error(f"Last 200 chars: {raw_content[-200:]}")
-            raise
-        except Exception as parse_error:
-            # Детальное логирование для других ошибок парсинга
-            logger.error(f"Failed to parse LLM response as TransactionResponse for audio: {parse_error}")
-            logger.error(f"Full response content ({len(raw_content)} chars): {raw_content}")
-            logger.error(f"First 200 chars: {raw_content[:200]}")
-            logger.error(f"Last 200 chars: {raw_content[-200:]}")
-            raise
-    except (APIError, InternalServerError) as e:
-        logger.error(f"LLM API error: {e}")
-        raise
-    except Exception as e:
-        logger.error(f"Error calling LLM: {e}", exc_info=True)
         raise
 
 
