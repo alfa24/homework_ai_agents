@@ -40,6 +40,10 @@ class Config:
         os.getenv("SYSTEM_PROMPT_IMAGE_PATH", "prompts/system_prompt_image.txt"),
         "SYSTEM_PROMPT_IMAGE"
     )
+    SYSTEM_PROMPT_AUDIO = load_prompt(
+        os.getenv("SYSTEM_PROMPT_AUDIO_PATH", "prompts/system_prompt_audio.txt"),
+        "SYSTEM_PROMPT_AUDIO"
+    )
 
 config = Config()
 
