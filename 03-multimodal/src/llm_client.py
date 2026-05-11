@@ -37,7 +37,7 @@ class LLMClient:
         self, history: Sequence[dict], user_text: str
     ) -> TransactionResponse:
         messages = [
-            {"role": "system", "content": self._settings.system_prompt_text},
+            {"role": "system", "content": self._settings.system_prompt},
             *list(history)[-HISTORY_WINDOW:],
             {"role": "user", "content": user_text},
         ]
@@ -52,7 +52,7 @@ class LLMClient:
     ) -> TransactionResponse:
         model = self._settings.model_image or self._settings.model_text
         messages = [
-            {"role": "system", "content": self._settings.system_prompt_image},
+            {"role": "system", "content": self._settings.system_prompt},
             *list(history)[-HISTORY_WINDOW:],
             {
                 "role": "user",

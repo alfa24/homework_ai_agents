@@ -43,8 +43,7 @@ class Settings:
     model_text: str
     model_image: str | None
     model_audio: str
-    system_prompt_text: str
-    system_prompt_image: str
+    system_prompt: str
     proxy_url: str | None
 
     @classmethod
@@ -60,13 +59,9 @@ class Settings:
             model_text=model_text,
             model_image=os.getenv("MODEL_IMAGE"),
             model_audio=os.getenv("MODEL_AUDIO", "openai/whisper-1"),
-            system_prompt_text=_load_prompt(
-                os.getenv("SYSTEM_PROMPT_TEXT_PATH", "prompts/system_prompt_text.txt"),
-                "SYSTEM_PROMPT_TEXT",
-            ),
-            system_prompt_image=_load_prompt(
-                os.getenv("SYSTEM_PROMPT_IMAGE_PATH", "prompts/system_prompt_image.txt"),
-                "SYSTEM_PROMPT_IMAGE",
+            system_prompt=_load_prompt(
+                os.getenv("SYSTEM_PROMPT_PATH", "prompts/system_prompt.txt"),
+                "SYSTEM_PROMPT",
             ),
             proxy_url=os.getenv("PROXY_URL"),
         )
