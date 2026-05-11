@@ -1,31 +1,45 @@
+"""Точка входа: сборка зависимостей, запуск polling."""
+from __future__ import annotations
+
 import asyncio
 import logging
+
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiohttp import ClientSession
 from aiohttp_socks import ProxyConnector
-from handlers import router
-from config import config
+from openai import AsyncOpenAI
+
+from audio_converter import AudioConverter
+from config import Settings
+from conversation_store import ConversationStore
+from finance_service import FinanceService
+from handlers import build_router
+from llm_client import LLMClient
+from report_formatter import ReportFormatter
+from transaction_store import TransactionStore
 
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
 
 class SocksSession(AiohttpSession):
-    def __init__(self, proxy_url: str):
+    def __init__(self, proxy_url: str) -> None:
         super().__init__()
         self._proxy_url = proxy_url
 
     async def create_session(self) -> ClientSession:
         if self._session is None or self._session.closed:
-            self._session = ClientSession(connector=ProxyConnector.from_url(self._proxy_url))
+            self._session = ClientSession(
+                connector=ProxyConnector.from_url(self._proxy_url)
+            )
         return self._session
 
 
-def _build_session(proxy_url: str | None) -> AiohttpSession | None:
+def _build_telegram_session(proxy_url: str | None) -> AiohttpSession | None:
     if not proxy_url:
         return None
     if proxy_url.startswith(("socks4://", "socks5://", "socks5h://")):
@@ -33,14 +47,36 @@ def _build_session(proxy_url: str | None) -> AiohttpSession | None:
     return AiohttpSession(proxy=proxy_url)
 
 
-async def main():
-    session = _build_session(config.PROXY_URL)
+def _build_bot(settings: Settings) -> Bot:
+    session = _build_telegram_session(settings.proxy_url)
     if session is not None:
-        logger.info(f"Using proxy: {config.PROXY_URL}")
+        logger.info("Using proxy: %s", settings.proxy_url)
+        return Bot(token=settings.telegram_token, session=session)
+    return Bot(token=settings.telegram_token)
 
-    bot = Bot(token=config.TELEGRAM_TOKEN, session=session) if session else Bot(token=config.TELEGRAM_TOKEN)
+
+def _build_service(settings: Settings) -> FinanceService:
+    openai_client = AsyncOpenAI(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_base_url,
+    )
+    llm = LLMClient(settings, openai_client)
+    return FinanceService(
+        llm=llm,
+        conversations=ConversationStore(),
+        transactions=TransactionStore(),
+        audio=AudioConverter(),
+    )
+
+
+async def main() -> None:
+    settings = Settings.load()
+    bot = _build_bot(settings)
+    service = _build_service(settings)
+    formatter = ReportFormatter()
+
     dp = Dispatcher()
-    dp.include_router(router)
+    dp.include_router(build_router(service, formatter))
 
     logger.info("Starting bot...")
     await dp.start_polling(bot)
@@ -48,4 +84,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
