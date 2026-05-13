@@ -82,6 +82,15 @@ async def main() -> None:
     dp = Dispatcher()
     dp.include_router(build_router(service, formatter, rag_service))
 
+    try:
+        logger.info("Auto-indexing RAG corpus at startup...")
+        await asyncio.to_thread(rag_service.reindex)
+        logger.info("RAG index ready: %d documents", rag_service.document_count)
+    except Exception:
+        logger.exception(
+            "Auto-indexing failed; /ask will be unavailable until /index is called"
+        )
+
     logger.info("Starting bot...")
     await dp.start_polling(bot)
 

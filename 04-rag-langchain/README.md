@@ -1,6 +1,6 @@
-# Персональный финансовый советник
+# Персональный финансовый советник + RAG-ассистент
 
-Telegram бот для учета доходов и расходов с интеграцией LLM через OpenRouter или Ollama.
+Telegram бот для учета доходов и расходов с интеграцией LLM через OpenRouter или Ollama, плюс RAG-ассистент по корпусу справочных документов СберБанка на LangChain.
 
 ## Возможности
 
@@ -11,6 +11,7 @@ Telegram бот для учета доходов и расходов с инте
 - ✅ Отчеты о балансе и статистике
 - ✅ История всех транзакций
 - ✅ Поддержка локальных моделей через Ollama (кроме голоса)
+- ✅ RAG-ассистент по корпусу `data/` (PDF + JSON) с диалоговой памятью (`/ask`, `/ask_reset`, `/index`, `/index_status`)
 
 ## Установка
 
@@ -90,6 +91,13 @@ Telegram бот для учета доходов и расходов с инте
    MODEL_TEXT=openai/gpt-oss-20b:free
    MODEL_IMAGE=qwen/qwen2.5-vl-32b-instruct
    MODEL_AUDIO=openai/gpt-audio-mini
+   # RAG (требует OpenRouter/OpenAI — Ollama для RAG не поддерживается в MVP)
+   MODEL_CHAT_RAG=openai/gpt-4o-mini
+   MODEL_EMBEDDINGS=openai/text-embedding-3-small
+   DATA_DIR=data
+   RETRIEVER_K=4
+   CHUNK_SIZE=1000
+   CHUNK_OVERLAP=200
    ```
 
    **Для Ollama:**
@@ -101,6 +109,7 @@ Telegram бот для учета доходов и расходов с инте
    MODEL_IMAGE=qwen3-vl:8b-instruct
    # MODEL_AUDIO не используется: Ollama не поддерживает audio input.
    # Голосовые сообщения доступны только через OpenRouter/OpenAI.
+   # RAG также недоступен через Ollama в MVP: требуется OpenAI-совместимый провайдер с embeddings API.
    ```
 
 **Описание переменных:**
@@ -114,6 +123,11 @@ Telegram бот для учета доходов и расходов с инте
 - `PROXY_URL` - SOCKS5 прокси для Telegram API (опционально, пример: `socks5://user:password@host:port`)
 - `SYSTEM_PROMPT_PATH` - путь к файлу с системным промптом (по умолчанию: `prompts/system_prompt.txt`)
 - `SYSTEM_PROMPT` - альтернатива: системный промпт напрямую в переменной окружения (опционально)
+- `MODEL_CHAT_RAG` - модель для RAG (query transform + генерация ответа), требует OpenRouter/OpenAI
+- `MODEL_EMBEDDINGS` - модель эмбеддингов для векторного индекса (OpenRouter/OpenAI)
+- `DATA_DIR` - каталог с корпусом для RAG (по умолчанию: `data`)
+- `RETRIEVER_K` - число извлекаемых чанков на запрос (по умолчанию: `4`)
+- `CHUNK_SIZE` / `CHUNK_OVERLAP` - параметры разбиения PDF на чанки (по умолчанию: `1000` / `200`)
 
 ## Запуск
 
@@ -127,9 +141,20 @@ make run
 
 ### Команды бота
 
+**Финансовый советник:**
 - `/start` - начать новый диалог (сбрасывает историю и транзакции)
 - `/balance` - показать баланс, доходы, расходы и статистику по категориям
 - `/transactions` - показать список всех транзакций
+
+**RAG-ассистент (справка СберБанка):**
+- `/ask <вопрос>` - задать вопрос по корпусу документов (PDF + JSON в `data/`); учитывает историю диалога
+- `/ask_reset` - очистить историю RAG-диалога для текущего чата
+- `/index` - вручную пересобрать векторный индекс из `data/`
+- `/index_status` - показать состояние индекса (построен/нет, число документов, время последней сборки)
+
+> Корпус: `data/ouk_potrebitelskiy_kredit_lph.pdf`, `data/usl_r_vkladov.pdf`, `data/sberbank_help_documents.json`. При старте бот автоматически выполняет индексацию; если она не удалась — бот продолжит работу, и `/ask` будет доступен после ручного `/index`. Финансовый советник работает независимо от RAG.
+
+> RAG требует OpenRouter/OpenAI-совместимого провайдера (нужен embeddings API). Через Ollama RAG в MVP не поддерживается — финсоветник на Ollama работает как раньше, RAG-команды в этом режиме будут возвращать ошибку.
 
 ### Примеры использования
 
@@ -190,24 +215,28 @@ make run
 
 ```
 ├── src/
-│   ├── audio_converter.py    # Конвертация аудио (OGG → WAV)
-│   ├── bot.py                # Точка входа, инициализация
-│   ├── config.py             # Загрузка конфигурации
-│   ├── conversation_store.py # Хранение истории диалогов
-│   ├── exceptions.py         # Доменные исключения
-│   ├── finance_service.py    # Бизнес-логика (извлечение, баланс)
-│   ├── handlers.py           # Обработчики сообщений и команд
-│   ├── llm_client.py         # Интеграция с LLM
-│   ├── models.py             # Pydantic модели для транзакций
-│   ├── report_formatter.py   # Форматирование отчётов
-│   └── transaction_store.py  # Хранение транзакций
+│   ├── audio_converter.py       # Конвертация аудио (OGG → WAV)
+│   ├── bot.py                   # Точка входа, инициализация, автоиндексация RAG
+│   ├── config.py                # Загрузка конфигурации
+│   ├── conversation_store.py    # История диалогов финсоветника
+│   ├── document_loader.py       # Загрузка PDF и JSON-корпуса для RAG
+│   ├── exceptions.py            # Доменные исключения (включая RagError)
+│   ├── finance_service.py       # Бизнес-логика (извлечение, баланс)
+│   ├── handlers.py              # Обработчики сообщений и команд
+│   ├── llm_client.py            # Интеграция с LLM
+│   ├── models.py                # Pydantic модели для транзакций
+│   ├── rag_conversation_store.py# История RAG-диалога (in-memory буфер BaseMessage)
+│   ├── rag_service.py           # RAG: индексация, query transform, retrieval, ответ
+│   ├── report_formatter.py      # Форматирование отчётов
+│   └── transaction_store.py     # Хранение транзакций
+├── data/                        # Корпус RAG (PDF + JSON справки СберБанка)
 ├── prompts/
-│   └── system_prompt.txt     # Единый системный промпт
-├── .env                      # Конфигурация (не коммитится)
-├── .env.example              # Пример конфигурации
-├── Makefile                  # Команды для работы
-├── pyproject.toml            # Зависимости проекта
-└── README.md                 # Документация
+│   └── system_prompt.txt        # Единый системный промпт финсоветника
+├── .env                         # Конфигурация (не коммитится)
+├── .env.example                 # Пример конфигурации
+├── Makefile                     # Команды для работы
+├── pyproject.toml               # Зависимости проекта
+└── README.md                    # Документация
 ```
 
 ### Команды Makefile
