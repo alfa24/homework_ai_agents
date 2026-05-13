@@ -1,8 +1,10 @@
-"""Тонкие Telegram-хендлеры. Вся бизнес-логика вынесена в FinanceService."""
+"""Тонкие Telegram-хендлеры. Вся бизнес-логика вынесена в FinanceService/RagService."""
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
+import time
 
 from aiogram import F, Router
 from aiogram.filters import Command
@@ -13,8 +15,10 @@ from exceptions import (
     LLMAudioUnsupportedError,
     LLMError,
     LLMImageUnsupportedError,
+    RagError,
 )
 from finance_service import FinanceService
+from rag_service import RagService
 from report_formatter import ReportFormatter
 
 logger = logging.getLogger(__name__)
@@ -68,8 +72,50 @@ def _image_filter(message: Message) -> bool:
 def build_router(
     service: FinanceService,
     formatter: ReportFormatter,
+    rag_service: RagService,
 ) -> Router:
     router = Router()
+
+    @router.message(Command("index"))
+    async def cmd_index(message: Message) -> None:
+        chat_id = message.chat.id
+        logger.info("Reindex requested by %s", chat_id)
+        progress = await message.answer("⏳ Индексирую документы…")
+        started = time.monotonic()
+        try:
+            count = await asyncio.to_thread(rag_service.reindex)
+        except RagError as exc:
+            logger.exception("Reindex failed for chat=%s", chat_id)
+            await progress.edit_text(f"❌ Ошибка индексации: {exc}")
+            return
+        except Exception as exc:  # noqa: BLE001 — сеть/LLM/прочее
+            logger.exception("Unexpected reindex error for chat=%s", chat_id)
+            await progress.edit_text(f"❌ Ошибка индексации: {exc}")
+            return
+        duration = time.monotonic() - started
+        logger.info(
+            "Reindex done for chat=%s: docs=%d, duration=%.1fs",
+            chat_id, count, duration,
+        )
+        await progress.edit_text(
+            f"✅ Готово: {count} документов (за {duration:.1f} с)"
+        )
+
+    @router.message(Command("index_status"))
+    async def cmd_index_status(message: Message) -> None:
+        chat_id = message.chat.id
+        logger.info("Index status requested by %s", chat_id)
+        if not rag_service.is_ready:
+            await message.answer("ℹ️ Индекс не построен. Выполните /index.")
+            return
+        last = rag_service.last_indexed_at
+        last_str = last.strftime("%Y-%m-%d %H:%M:%S") if last else "—"
+        await message.answer(
+            "📊 Статус индекса:\n"
+            f"• Готов: да\n"
+            f"• Документов: {rag_service.document_count}\n"
+            f"• Последняя индексация: {last_str}"
+        )
 
     @router.message(Command("start"))
     async def cmd_start(message: Message) -> None:

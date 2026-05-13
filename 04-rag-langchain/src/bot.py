@@ -16,6 +16,7 @@ from conversation_store import ConversationStore
 from finance_service import FinanceService
 from handlers import build_router
 from llm_client import LLMClient
+from rag_service import RagService
 from report_formatter import ReportFormatter
 from transaction_store import TransactionStore
 
@@ -74,9 +75,10 @@ async def main() -> None:
     bot = _build_bot(settings)
     service = _build_service(settings)
     formatter = ReportFormatter()
+    rag_service = RagService(settings)
 
     dp = Dispatcher()
-    dp.include_router(build_router(service, formatter))
+    dp.include_router(build_router(service, formatter, rag_service))
 
     logger.info("Starting bot...")
     await dp.start_polling(bot)
