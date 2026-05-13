@@ -8,6 +8,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiohttp import ClientSession
 from aiohttp_socks import ProxyConnector
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from openai import AsyncOpenAI
 
 from audio_converter import AudioConverter
@@ -16,7 +17,15 @@ from conversation_store import ConversationStore
 from finance_service import FinanceService
 from handlers import build_router
 from llm_client import LLMClient
-from rag_conversation_store import RagConversationStore
+from rag.answer_generator import AnswerGenerator
+from rag.context_retriever import ContextRetriever
+from rag.corpus_indexer import CorpusIndexer
+from rag.document_source import (
+    PdfDocumentSource,
+    SberbankJsonDocumentSource,
+)
+from rag.in_memory_history import InMemoryMessageHistory
+from rag.query_rewriter import QueryRewriter
 from rag_service import RagService
 from report_formatter import ReportFormatter
 from transaction_store import TransactionStore
@@ -71,13 +80,48 @@ def _build_service(settings: Settings) -> FinanceService:
     )
 
 
+def _build_rag_service(settings: Settings) -> RagService:
+    embeddings = OpenAIEmbeddings(
+        model=settings.model_embeddings,
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_base_url,
+    )
+    llm = ChatOpenAI(
+        model=settings.model_chat_rag,
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_base_url,
+        temperature=0,
+    )
+    sources = [
+        PdfDocumentSource(
+            data_dir=settings.data_dir,
+            chunk_size=settings.chunk_size,
+            chunk_overlap=settings.chunk_overlap,
+        ),
+        SberbankJsonDocumentSource(
+            path=settings.data_dir / "sberbank_help_documents.json"
+        ),
+    ]
+    indexer = CorpusIndexer(sources=sources, embeddings=embeddings)
+    return RagService(
+        indexer=indexer,
+        rewriter=QueryRewriter(
+            llm=llm, instruction=settings.query_transform_prompt
+        ),
+        retriever=ContextRetriever(indexer=indexer, k=settings.retriever_k),
+        generator=AnswerGenerator(
+            llm=llm, system_template=settings.answer_system_prompt
+        ),
+        conversations=InMemoryMessageHistory(),
+    )
+
+
 async def main() -> None:
     settings = Settings.load()
     bot = _build_bot(settings)
     service = _build_service(settings)
     formatter = ReportFormatter()
-    rag_conversations = RagConversationStore()
-    rag_service = RagService(settings, rag_conversations)
+    rag_service = _build_rag_service(settings)
 
     dp = Dispatcher()
     dp.include_router(build_router(service, formatter, rag_service))

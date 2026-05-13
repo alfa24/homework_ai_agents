@@ -1,10 +1,10 @@
-"""In-memory история диалога RAG-ассистента по chat_id (LangChain BaseMessage)."""
+"""In-memory реализация `MessageHistoryStore` для RAG-ассистента."""
 from __future__ import annotations
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 
-class RagConversationStore:
+class InMemoryMessageHistory:
     """Хранит историю RAG-диалога для каждого chat_id с ограничением длины.
 
     Буфер ограничен по числу сообщений (Human + AI считаются раздельно).

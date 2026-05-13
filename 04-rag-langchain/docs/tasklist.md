@@ -159,6 +159,7 @@
 | 2 | Команды `/index` и `/index_status` — синхронная пересборка индекса с прогресс-сообщениями | ✅ Завершено | 2026-05-13 |
 | 3 | Диалоговый Q&A: `RagConversationStore`, `RagService.answer`, `rag_query_transform_chain`, команды `/ask` и `/ask_reset` | ✅ Завершено | 2026-05-13 |
 | 4 | Автоиндексация при старте + актуализация `README.md` и `.env.example` | ✅ Завершено | 2026-05-13 |
+| — | Рефакторинг Sprint 2: пакет `src/rag/` (QueryRewriter, ContextRetriever, AnswerGenerator, CorpusIndexer, DocumentSource, MessageHistoryStore + InMemory), вынос промптов в `prompts/`, пакет `src/handlers/` (root/finance/rag/media/texts/errors), DI-сборка в `bot.py` | ✅ Завершено | 2026-05-13 |
 
 ### 🚀 Итерации
 

@@ -28,6 +28,16 @@ def _load_prompt(file_path: str, env_var: str | None = None) -> str:
     return ""
 
 
+def _require_prompt(file_path: str, env_var: str) -> str:
+    """Как `_load_prompt`, но валится при пустом значении (fail-fast)."""
+    text = _load_prompt(file_path, env_var)
+    if not text:
+        raise ConfigError(
+            f"Empty prompt: set {env_var} or provide non-empty file at {file_path}"
+        )
+    return text
+
+
 def _require(name: str) -> str:
     value = os.getenv(name)
     if not value:
@@ -62,6 +72,8 @@ class Settings:
     retriever_k: int
     chunk_size: int
     chunk_overlap: int
+    query_transform_prompt: str
+    answer_system_prompt: str
 
     @classmethod
     def load(cls) -> "Settings":
@@ -92,4 +104,18 @@ class Settings:
             retriever_k=_require_int("RETRIEVER_K", 4),
             chunk_size=_require_int("CHUNK_SIZE", 1000),
             chunk_overlap=_require_int("CHUNK_OVERLAP", 200),
+            query_transform_prompt=_require_prompt(
+                os.getenv(
+                    "RAG_QUERY_TRANSFORM_PROMPT_PATH",
+                    "prompts/rag_query_transform.txt",
+                ),
+                "RAG_QUERY_TRANSFORM_PROMPT",
+            ),
+            answer_system_prompt=_require_prompt(
+                os.getenv(
+                    "RAG_ANSWER_SYSTEM_PROMPT_PATH",
+                    "prompts/rag_answer_system.txt",
+                ),
+                "RAG_ANSWER_SYSTEM_PROMPT",
+            ),
         )
