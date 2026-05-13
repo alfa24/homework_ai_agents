@@ -60,6 +60,12 @@ AUDIO_CONVERSION_ERROR = (
     "Произошла ошибка при обработке голосового сообщения. "
     "Попробуйте ещё раз или используйте /start для начала нового диалога."
 )
+ASK_USAGE_HINT = (
+    "Используйте: /ask <ваш вопрос>\n"
+    "Например: /ask Какие условия по потребительскому кредиту?"
+)
+ASK_NO_INDEX_HINT = "Индекс не построен. Сначала выполните /index."
+ASK_RESET_DONE = "🧹 История диалога с RAG-ассистентом очищена."
 
 
 def _image_filter(message: Message) -> bool:
@@ -100,6 +106,38 @@ def build_router(
         await progress.edit_text(
             f"✅ Готово: {count} документов (за {duration:.1f} с)"
         )
+
+    @router.message(Command("ask"))
+    async def cmd_ask(message: Message) -> None:
+        chat_id = message.chat.id
+        parts = (message.text or "").split(maxsplit=1)
+        question = parts[1].strip() if len(parts) > 1 else ""
+        if not question:
+            await message.answer(ASK_USAGE_HINT)
+            return
+        if not rag_service.is_ready:
+            await message.answer(ASK_NO_INDEX_HINT)
+            return
+        logger.info("RAG ask from %s: %s...", chat_id, question[:100])
+        progress = await message.answer("⏳ Ищу ответ в документах…")
+        try:
+            answer = await asyncio.to_thread(rag_service.answer, chat_id, question)
+        except RagError as exc:
+            logger.exception("RAG error on ask from %s", chat_id)
+            await progress.edit_text(f"❌ {exc}")
+            return
+        except Exception:  # noqa: BLE001 — неизвестные сбои возвращаем пользователю мягко
+            logger.exception("Unexpected RAG error for chat=%s", chat_id)
+            await progress.edit_text(GENERIC_LLM_ERROR)
+            return
+        await progress.edit_text(answer)
+
+    @router.message(Command("ask_reset"))
+    async def cmd_ask_reset(message: Message) -> None:
+        chat_id = message.chat.id
+        logger.info("RAG reset by %s", chat_id)
+        rag_service.reset(chat_id)
+        await message.answer(ASK_RESET_DONE)
 
     @router.message(Command("index_status"))
     async def cmd_index_status(message: Message) -> None:

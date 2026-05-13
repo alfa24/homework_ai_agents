@@ -1,25 +1,57 @@
-"""RAG-сервис: индексация корпуса и ответы с retrieval (ответы — в итерации 2)."""
+"""RAG-сервис: индексация корпуса и диалоговые ответы с retrieval."""
 from __future__ import annotations
 
 import logging
 from datetime import datetime
 from typing import Optional
 
+from langchain_core.documents import Document
+from langchain_core.messages import HumanMessage
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.vectorstores import InMemoryVectorStore, VectorStoreRetriever
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
 from config import Settings
 from document_loader import load_pdfs, load_sberbank_json
 from exceptions import RagError
+from rag_conversation_store import RagConversationStore
 
 logger = logging.getLogger(__name__)
+
+_QUERY_TRANSFORM_INSTRUCTION = (
+    "Transform last user message to a search query in Russian language "
+    "according to the whole conversation history above to further retrieve "
+    "the information relevant to the conversation. Try to thoroughly analyze "
+    "all messages to generate the most relevant query. The longer result "
+    "better than short. Let it be better more abstract than specific. "
+    "Only respond with the query, nothing else."
+)
+
+_ANSWER_SYSTEM_TEMPLATE = (
+    "You are an assistant for question-answering tasks. Answer the user's "
+    "questions based on the conversation history and below context retrieved "
+    "for the last question. Answer 'Я не нашёл ответа на ваш вопрос.' if you "
+    "don't find any information in the context. Use three sentences maximum "
+    "and keep the answer concise. Respond in Russian.\n\n"
+    "Context retrieved for the last question:\n\n{context}"
+)
+
+
+def _format_chunks(chunks: list[Document]) -> str:
+    return "\n\n".join(chunk.page_content for chunk in chunks)
 
 
 class RagService:
     """Управляет векторным хранилищем и генерацией ответов по корпусу."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        conversations: RagConversationStore,
+    ) -> None:
         self._settings = settings
+        self._conversations = conversations
         self._embeddings = OpenAIEmbeddings(
             model=settings.model_embeddings,
             api_key=settings.openai_api_key,
@@ -74,6 +106,51 @@ class RagService:
         logger.info("Индексация завершена: %d документов", self._document_count)
         return self._document_count
 
+    def answer(self, chat_id: int, question: str) -> str:
+        """Диалоговый ответ по корпусу с query transformation и историей."""
+        if self._vector_store is None:
+            raise RagError("Индекс не построен. Сначала выполните /index.")
+
+        history = self._conversations.get(chat_id)
+        messages = history + [HumanMessage(content=question)]
+        logger.info(
+            "RAG answer: chat=%s, history_len=%d, question=%r",
+            chat_id, len(history), question[:120],
+        )
+
+        try:
+            rewritten = self._build_query_transform_chain().invoke(
+                {"messages": messages}
+            )
+            logger.info(
+                "RAG rewritten query: chat=%s, query=%r", chat_id, rewritten[:200]
+            )
+
+            chunks = self._retriever().invoke(rewritten)
+            logger.info(
+                "RAG retrieved: chat=%s, docs=%d", chat_id, len(chunks)
+            )
+
+            response = self._build_answer_chain().invoke(
+                {
+                    "messages": messages,
+                    "context": _format_chunks(chunks),
+                }
+            )
+        except Exception as exc:  # noqa: BLE001 — любой сбой LLM/retriever
+            logger.exception("RAG answer failed for chat=%s", chat_id)
+            raise RagError(f"Ошибка генерации ответа: {exc}") from exc
+
+        self._conversations.append(chat_id, question, response)
+        logger.info(
+            "RAG answer done: chat=%s, answer_len=%d", chat_id, len(response)
+        )
+        return response
+
+    def reset(self, chat_id: int) -> None:
+        """Очищает историю RAG-диалога для чата."""
+        self._conversations.clear(chat_id)
+
     def _retriever(self) -> VectorStoreRetriever:
         if self._vector_store is None:
             raise RagError("Индекс не построен. Сначала выполните reindex().")
@@ -81,6 +158,20 @@ class RagService:
             search_kwargs={"k": self._settings.retriever_k}
         )
 
-    def answer(self, question: str, history: list[dict] | None = None) -> str:
-        """Генерирует ответ по корпусу. Реализация — в итерации 2."""
-        raise NotImplementedError("answer() будет реализован в итерации 2")
+    def _build_query_transform_chain(self):
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                MessagesPlaceholder(variable_name="messages"),
+                ("user", _QUERY_TRANSFORM_INSTRUCTION),
+            ]
+        )
+        return prompt | self._llm | StrOutputParser()
+
+    def _build_answer_chain(self):
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", _ANSWER_SYSTEM_TEMPLATE),
+                MessagesPlaceholder(variable_name="messages"),
+            ]
+        )
+        return prompt | self._llm | StrOutputParser()

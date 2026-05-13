@@ -157,7 +157,7 @@
 |----------|------------|--------|------|
 | 1 | Инфраструктура RAG: зависимости, конфиг, загрузчик документов, скелет `RagService` | ✅ Завершено | 2026-05-13 |
 | 2 | Команды `/index` и `/index_status` — синхронная пересборка индекса с прогресс-сообщениями | ✅ Завершено | 2026-05-13 |
-| 3 | Диалоговый Q&A: `RagConversationStore`, `RagService.answer`, `rag_query_transform_chain`, команды `/ask` и `/ask_reset` | ⏳ Не начато | — |
+| 3 | Диалоговый Q&A: `RagConversationStore`, `RagService.answer`, `rag_query_transform_chain`, команды `/ask` и `/ask_reset` | ✅ Завершено | 2026-05-13 |
 | 4 | Автоиндексация при старте + актуализация `README.md` и `.env.example` | ⏳ Не начато | — |
 
 ### 🚀 Итерации
@@ -201,15 +201,15 @@
 
 **Цель:** основная функциональность RAG — ответы на вопросы по корпусу с учётом истории диалога.
 
-- [ ] Создать `src/rag_conversation_store.py`: in-memory `dict[int, list[BaseMessage]]`, методы `get/append/clear`, ограничение длины буфера
-- [ ] Реализовать `RagService.answer(chat_id, question)`:
-  - [ ] `rag_query_transform_chain` (LLM переписывает вопрос с учётом истории диалога) — см. `docs/references/naive-rag.ipynb`
-  - [ ] `InMemoryVectorStore.as_retriever(k=RETRIEVER_K)` → top-K документов
-  - [ ] Финальный `ChatOpenAI` генерирует ответ по извлечённому контексту (`MODEL_CHAT_RAG` используется и для трансформации, и для ответа — KISS)
-  - [ ] Сохранение пары `HumanMessage`/`AIMessage` в `RagConversationStore`
-- [ ] Обновить `src/handlers.py`: команды `/ask <вопрос>` → `RagService.answer`, `/ask_reset` → `RagConversationStore.clear`. Обычный текст, фото и голос по-прежнему идут в `FinanceService`, логика не меняется
-- [ ] Валидация: `/ask` без аргумента → короткая подсказка пользователю; индекс не построен → понятное сообщение с советом вызвать `/index`
-- [ ] Логирование: `chat_id`, длина истории, переписанный запрос, количество извлечённых документов, длина ответа — без утечки чувствительных данных
+- [x] Создать `src/rag_conversation_store.py`: in-memory `dict[int, list[BaseMessage]]`, методы `get/append/clear`, ограничение длины буфера
+- [x] Реализовать `RagService.answer(chat_id, question)`:
+  - [x] `rag_query_transform_chain` (LLM переписывает вопрос с учётом истории диалога) — см. `docs/references/naive-rag.ipynb`
+  - [x] `InMemoryVectorStore.as_retriever(k=RETRIEVER_K)` → top-K документов
+  - [x] Финальный `ChatOpenAI` генерирует ответ по извлечённому контексту (`MODEL_CHAT_RAG` используется и для трансформации, и для ответа — KISS)
+  - [x] Сохранение пары `HumanMessage`/`AIMessage` в `RagConversationStore`
+- [x] Обновить `src/handlers.py`: команды `/ask <вопрос>` → `RagService.answer`, `/ask_reset` → `RagConversationStore.clear`. Обычный текст, фото и голос по-прежнему идут в `FinanceService`, логика не меняется
+- [x] Валидация: `/ask` без аргумента → короткая подсказка пользователю; индекс не построен → понятное сообщение с советом вызвать `/index`
+- [x] Логирование: `chat_id`, длина истории, переписанный запрос, количество извлечённых документов, длина ответа — без утечки чувствительных данных
 
 **Как протестировать:**
 - `/ask Какие условия по потребительскому кредиту?` → ответ на основе PDF
