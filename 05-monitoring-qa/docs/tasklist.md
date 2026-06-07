@@ -246,9 +246,9 @@
 
 | Итерация | Функционал | Статус | Дата |
 |----------|------------|--------|------|
-| 1 | ДЗ-5: Отображение источников — рефакторинг RAG-цепочки, `SHOW_SOURCES` | ⏳ Не начато | — |
-| 2 | ДЗ-5: LangSmith-трейсинг — переменные окружения, конфиг, проверка | ⏳ Не начато | — |
-| 3 | ДЗ-5: Синтез датасетов — `dataset_synthesizer.py`, `make dataset`, загрузка в LangSmith | ⏳ Не начато | — |
+| 1 | ДЗ-5: Отображение источников — рефакторинг RAG-цепочки, `SHOW_SOURCES` | ✅ Завершено | — |
+| 2 | ДЗ-5: LangSmith-трейсинг — переменные окружения, конфиг, проверка | ✅ Завершено | — |
+| 3 | ДЗ-5: Синтез датасетов — `dataset_synthesizer.py`, `make dataset`, загрузка в LangSmith | ✅ Завершено | 2026-06-07 |
 | 4 | ДЗ-5: RAGAS evaluation — `evaluation.py`, команда `/evaluate_dataset`, 6 метрик, feedback в LangSmith | ⏳ Не начато | — |
 
 **Легенда статусов:**
@@ -263,11 +263,11 @@
 
 **Цель:** бот показывает список документов и страниц, использованных для ответа.
 
-- [ ] Рефакторинг RAG-цепочки: `AnswerGenerator` возвращает ответ вместе со списком использованных `Document`
-- [ ] Добавить `show_sources: bool` в `Settings` (из `SHOW_SOURCES`, по умолчанию `false`)
-- [ ] Форматирование источников: `📚 Источники: filename.pdf (стр. 1, 3, 5)`
-- [ ] Обновить хендлер `/ask`: при `SHOW_SOURCES=true` добавлять блок источников к ответу
-- [ ] Обновить `.env.example`: `SHOW_SOURCES=false`
+- [x] Рефакторинг RAG-цепочки: `RagService.answer` возвращает `tuple[str, list[Document]]`
+- [x] Добавить `show_sources: bool` в `Settings` (из `SHOW_SOURCES`, по умолчанию `false`)
+- [x] Форматирование источников: `📚 Источники: filename.pdf (стр. 1, 3, 5)`
+- [x] Обновить хендлер `/ask`: при `SHOW_SOURCES=true` добавлять блок источников к ответу
+- [x] Обновить `.env.example`: `SHOW_SOURCES=false`
 
 **Как протестировать:**
 - `SHOW_SOURCES=true` → `/ask` возвращает ответ + блок «📚 Источники»
@@ -279,10 +279,10 @@
 
 **Цель:** автоматический трейсинг всех RAG-запросов через LangSmith.
 
-- [ ] Добавить `langsmith` в `pyproject.toml`
-- [ ] Обновить `.env.example`: `LANGCHAIN_TRACING_V2=true`, `LANGCHAIN_API_KEY=`, `LANGCHAIN_PROJECT=05-monitoring-qa`
-- [ ] Проверить, что LangChain автоматически отправляет трейсы при наличии переменных
-- [ ] Документация: обновить `README.md` — раздел про LangSmith
+- [x] Добавить `langsmith` в `pyproject.toml`
+- [x] Обновить `.env.example`: `LANGCHAIN_TRACING_V2=true`, `LANGCHAIN_API_KEY=`, `LANGCHAIN_PROJECT=05-monitoring-qa`
+- [x] Проверить, что LangChain автоматически отправляет трейсы при наличии переменных
+- [x] Документация: обновить `README.md` — раздел про LangSmith
 
 **Как протестировать:**
 - Задать переменные `LANGSMITH_*` → выполнить `/ask` → увидеть трейс в дашборде LangSmith
@@ -294,15 +294,15 @@
 
 **Цель:** генерация QA-датасета из корпуса документов для последующей оценки.
 
-- [ ] Добавить `datasets` в `pyproject.toml`
-- [ ] Создать `src/dataset_synthesizer.py`:
-  - [ ] Выборка по 2 чанка из каждого PDF в `data/`
-  - [ ] LLM генерирует вопрос и эталонный ответ по каждому чанку
-  - [ ] Загрузка готовых Q&A из JSON-файлов (если есть)
-  - [ ] Сохранение в `datasets/05-rag-qa-dataset.json`
-  - [ ] Загрузка в LangSmith с проверкой на дубликаты
-- [ ] Добавить в `Makefile`: `make dataset` и `make dataset-upload`
-- [ ] Создать директорию `datasets/`
+- [x] Добавить `datasets` в `pyproject.toml`
+- [x] Создать `src/dataset_synthesizer.py`:
+  - [x] Выборка по 2 чанка из каждого PDF в `data/`
+  - [x] LLM генерирует вопрос и эталонный ответ по каждому чанку
+  - [x] Загрузка готовых Q&A из JSON-файлов (если есть)
+  - [x] Сохранение в `datasets/05-rag-qa-dataset.json`
+  - [x] Загрузка в LangSmith с проверкой на дубликаты
+- [x] Добавить в `Makefile`: `make dataset` и `make dataset-upload`
+- [x] Создать директорию `datasets/`
 
 **Как протестировать:**
 - `make dataset` → файл `datasets/05-rag-qa-dataset.json` с Q&A-парами
