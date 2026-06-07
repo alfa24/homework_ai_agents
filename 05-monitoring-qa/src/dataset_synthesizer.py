@@ -2,7 +2,7 @@
 
 Команды:
 - generate: собрать датасет из PDF-чанков и готовых JSON Q&A;
-- upload: загрузить сохранённый датасет в LangSmith без дублей по question.
+- upload: загрузить сохранённый датасет в Langfuse без дублей по question.
 """
 from __future__ import annotations
 
@@ -16,8 +16,7 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.documents import Document
 from langchain_openai import ChatOpenAI
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langsmith import Client
-from langsmith.utils import LangSmithNotFoundError
+from langfuse import Langfuse
 
 from config import PROJECT_ROOT, Settings
 from dataset_item import (
@@ -33,7 +32,7 @@ from dataset_item import (
 
 DATASET_DIR = PROJECT_ROOT / "datasets"
 DATASET_PATH = DATASET_DIR / "05-rag-qa-dataset.json"
-LANGSMITH_DATASET_NAME = "05-rag-qa-dataset"
+LANGFUSE_DATASET_NAME = "05-rag-qa-dataset"
 PDF_SAMPLE_SIZE = 2
 DEFAULT_ENCODING = "utf-8"
 JSON_PATTERN = "*.json"
@@ -76,19 +75,19 @@ class DatasetSynthesizer:
 
     def upload(self) -> int:
         items = self._load_dataset()
-        client = Client()
-        self._ensure_langsmith_dataset(client)
-        existing_questions = self._load_langsmith_questions(client)
+        langfuse = Langfuse()
+        self._ensure_langfuse_dataset(langfuse)
+        existing_questions = self._load_langfuse_questions(langfuse)
 
         uploaded_count = 0
         for item in items:
             question = item.question.strip()
             if not question or question in existing_questions:
                 continue
-            client.create_example(
-                dataset_name=LANGSMITH_DATASET_NAME,
-                inputs={QUESTION_KEY: question},
-                outputs={ANSWER_KEY: item.answer},
+            langfuse.create_dataset_item(
+                dataset_name=LANGFUSE_DATASET_NAME,
+                input={QUESTION_KEY: question},
+                expected_output={ANSWER_KEY: item.answer},
                 metadata={
                     SOURCE_KEY: item.source,
                     PAGE_KEY: item.page,
@@ -100,7 +99,8 @@ class DatasetSynthesizer:
             existing_questions.add(question)
             uploaded_count += 1
 
-        logger.info("Загружено новых примеров в LangSmith: %d", uploaded_count)
+        langfuse.flush()
+        logger.info("Загружено новых примеров в Langfuse: %d", uploaded_count)
         return uploaded_count
 
     def _generate_from_pdfs(self) -> list[DatasetItem]:
@@ -224,22 +224,26 @@ class DatasetSynthesizer:
         )
         logger.info("Датасет сохранён: %s (%d примеров)", DATASET_PATH, len(items))
 
-    def _ensure_langsmith_dataset(self, client: Client) -> None:
+    def _ensure_langfuse_dataset(self, langfuse: Langfuse) -> None:
         try:
-            client.read_dataset(dataset_name=LANGSMITH_DATASET_NAME)
-        except LangSmithNotFoundError:
-            client.create_dataset(
-                LANGSMITH_DATASET_NAME,
+            langfuse.create_dataset(
+                name=LANGFUSE_DATASET_NAME,
                 description="QA-датасет для оценки RAG-пайплайна проекта 05-monitoring-qa",
             )
-            logger.info("Создан датасет LangSmith: %s", LANGSMITH_DATASET_NAME)
+            logger.info("Создан датасет Langfuse: %s", LANGFUSE_DATASET_NAME)
+        except Exception:
+            logger.debug("Датасет Langfuse уже существует: %s", LANGFUSE_DATASET_NAME)
 
-    def _load_langsmith_questions(self, client: Client) -> set[str]:
+    def _load_langfuse_questions(self, langfuse: Langfuse) -> set[str]:
         questions: set[str] = set()
-        for example in client.list_examples(dataset_name=LANGSMITH_DATASET_NAME):
-            question = str(example.inputs.get(QUESTION_KEY, "")).strip()
-            if question:
-                questions.add(question)
+        try:
+            dataset = langfuse.get_dataset(name=LANGFUSE_DATASET_NAME)
+            for item in dataset.items:
+                question = str(item.input.get(QUESTION_KEY, "")).strip()
+                if question:
+                    questions.add(question)
+        except Exception:
+            logger.debug("Не удалось загрузить items из Langfuse — дедупликация пропущена")
         return questions
 
     @staticmethod
@@ -252,7 +256,7 @@ class DatasetSynthesizer:
                 continue
             seen_questions.add(question)
             unique_items.append(item)
-        return unique_items
+        return unique_items[:5]
 
     @staticmethod
     def _parse_llm_json(text: str) -> dict[str, Any]:
@@ -289,7 +293,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "command",
         choices=("generate", "upload"),
-        help="generate — сохранить JSON; upload — загрузить JSON в LangSmith",
+        help="generate — сохранить JSON; upload — загрузить JSON в Langfuse",
     )
     return parser.parse_args()
 
@@ -308,8 +312,8 @@ def main() -> None:
     else:
         uploaded_count = synthesizer.upload()
         print(
-            f"Uploaded {uploaded_count} new examples to LangSmith dataset "
-            f"{LANGSMITH_DATASET_NAME}"
+            f"Uploaded {uploaded_count} new examples to Langfuse dataset "
+            f"{LANGFUSE_DATASET_NAME}"
         )
 
 

@@ -15,7 +15,7 @@ URL_KEY = "url"
 
 @dataclass(frozen=True, slots=True)
 class DatasetItem:
-    """Одна QA-пара для LangSmith/RAGAS."""
+    """Одна QA-пара для Langfuse/RAGAS."""
 
     question: str
     answer: str
