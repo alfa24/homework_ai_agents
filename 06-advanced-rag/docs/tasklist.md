@@ -340,7 +340,7 @@
 |----------|------------|--------|------|
 | 1 | ДЗ-6: Конфиг и зависимости Advanced RAG | ✅ Завершено | 2026-06-10, ревью и фикс по vision.md |
 | 2 | ДЗ-6: Провайдеры embeddings и RAGAS embeddings | ✅ Завершено | 2026-06-10 |
-| 3 | ДЗ-6: Hybrid retrieval Semantic + BM25 | ⏳ Не начато | — |
+| 3 | ДЗ-6: Hybrid retrieval Semantic + BM25 | ✅ Завершено | 2026-06-10 |
 | 4 | ДЗ-6: Cross-encoder reranker | ⏳ Не начато | — |
 | 5 | ДЗ-6: Переключение режимов и интеграция LCEL-пайплайна | ⏳ Не начато | — |
 | 6 | ДЗ-6: Документация, smoke-проверки и evaluation-сравнение режимов | ⏳ Не начато | — |
@@ -388,11 +388,11 @@
 
 **Цель:** добавить гибридный поиск по примеру `docs/references/advanced-hybrid-rag.ipynb` Part 1.
 
-- [ ] При `reindex()` создавать semantic retriever и `BM25Retriever.from_documents(...)`
-- [ ] Собрать `EnsembleRetriever` с весами `HYBRID_SEMANTIC_WEIGHT` и `HYBRID_BM25_WEIGHT`
-- [ ] Раздельно применить настройки top-K для semantic, BM25 и hybrid candidates
-- [ ] Сохранить текущий semantic-only режим для обратной совместимости
-- [ ] Не менять query transformation: retrieval получает уже переписанный поисковый запрос
+- [x] При `reindex()` создавать semantic retriever и `BM25Retriever.from_documents(...)`
+- [x] Собрать `EnsembleRetriever` с весами `HYBRID_SEMANTIC_WEIGHT` и `HYBRID_BM25_WEIGHT`
+- [x] Раздельно применить настройки top-K для semantic, BM25 и hybrid candidates
+- [x] Сохранить текущий semantic-only режим для обратной совместимости
+- [x] Не менять query transformation: retrieval получает уже переписанный поисковый запрос
 
 **Как протестировать:**
 - `RAG_RETRIEVAL_MODE=semantic` возвращает документы через векторный поиск

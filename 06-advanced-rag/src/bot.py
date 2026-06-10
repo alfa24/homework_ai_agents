@@ -18,7 +18,7 @@ from finance_service import FinanceService
 from handlers import build_router
 from llm_client import LLMClient
 from rag.answer_generator import AnswerGenerator
-from rag.context_retriever import ContextRetriever
+from rag.context_retriever import ContextRetriever, RetrieverConfig
 from rag.corpus_indexer import CorpusIndexer
 from rag.document_source import (
     PdfDocumentSource,
@@ -110,7 +110,17 @@ def _build_rag_service(settings: Settings) -> RagService:
         rewriter=QueryRewriter(
             llm=llm, instruction=settings.query_transform_prompt
         ),
-        retriever=ContextRetriever(indexer=indexer, k=settings.semantic_retriever_k),
+        retriever=ContextRetriever(
+            indexer=indexer,
+            config=RetrieverConfig(
+                mode=settings.rag_retrieval_mode,
+                semantic_k=settings.semantic_retriever_k,
+                bm25_k=settings.bm25_retriever_k,
+                hybrid_k=settings.hybrid_retriever_k,
+                semantic_weight=settings.hybrid_semantic_weight,
+                bm25_weight=settings.hybrid_bm25_weight,
+            ),
+        ),
         generator=AnswerGenerator(
             llm=llm, system_template=settings.answer_system_prompt
         ),
