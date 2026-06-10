@@ -65,12 +65,8 @@ def _require_float(name: str, default: float) -> float:
         raise ConfigError(f"Invalid float for {name}: {raw!r}") from exc
 
 
-def _require_positive_int(
-    name: str, default: int, legacy_name: str | None = None
-) -> int:
+def _require_positive_int(name: str, default: int) -> int:
     value = _require_int(name, default)
-    if legacy_name and (os.getenv(name) is None or os.getenv(name) == ""):
-        value = _require_int(legacy_name, default)
     if value <= 0:
         raise ConfigError(f"{name} must be a positive integer")
     return value
@@ -103,15 +99,17 @@ class Settings:
     proxy_url: str | None
     # RAG (Sprint 2)
     model_chat_rag: str
+    embeddings_provider: str
     model_embeddings: str
     data_dir: Path
     rag_retrieval_mode: str
     semantic_retriever_k: int
     bm25_retriever_k: int
+    hybrid_retriever_k: int
     hybrid_semantic_weight: float
     hybrid_bm25_weight: float
-    reranker_model: str
-    reranker_top_n: int
+    cross_encoder_model: str
+    reranker_top_k: int
     chunk_size: int
     chunk_overlap: int
     query_transform_prompt: str
@@ -119,7 +117,8 @@ class Settings:
     show_sources: bool
     # RAGAS (Sprint 3)
     ragas_llm_model: str
-    ragas_embedding_model: str
+    ragas_embeddings_provider: str
+    ragas_embeddings_model: str
     # Langfuse
     langfuse_secret_key: str
     langfuse_public_key: str
@@ -149,6 +148,9 @@ class Settings:
             ),
             proxy_url=os.getenv("PROXY_URL"),
             model_chat_rag=_require("MODEL_CHAT_RAG"),
+            embeddings_provider=_require_choice(
+                "EMBEDDINGS_PROVIDER", "openai", {"openai", "huggingface"},
+            ),
             model_embeddings=_require("MODEL_EMBEDDINGS"),
             data_dir=data_dir,
             rag_retrieval_mode=_require_choice(
@@ -156,18 +158,18 @@ class Settings:
                 "semantic",
                 {"semantic", "hybrid", "hybrid_rerank"},
             ),
-            semantic_retriever_k=_require_positive_int(
-                "SEMANTIC_RETRIEVER_K", 4, legacy_name="RETRIEVER_K"
-            ),
-            bm25_retriever_k=_require_positive_int("BM25_RETRIEVER_K", 4),
+            semantic_retriever_k=_require_positive_int("SEMANTIC_RETRIEVER_K", 4),
+            bm25_retriever_k=_require_positive_int("BM25_RETRIEVER_K", 8),
+            hybrid_retriever_k=_require_positive_int("HYBRID_RETRIEVER_K", 8),
             hybrid_semantic_weight=_require_positive_float(
                 "HYBRID_SEMANTIC_WEIGHT", 0.5
             ),
             hybrid_bm25_weight=_require_positive_float("HYBRID_BM25_WEIGHT", 0.5),
-            reranker_model=os.getenv(
-                "RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2"
+            cross_encoder_model=os.getenv(
+                "MODEL_CROSS_ENCODER",
+                "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
             ),
-            reranker_top_n=_require_positive_int("RERANKER_TOP_N", 4),
+            reranker_top_k=_require_positive_int("RERANKER_TOP_K", 4),
             chunk_size=_require_int("CHUNK_SIZE", 1000),
             chunk_overlap=_require_int("CHUNK_OVERLAP", 200),
             query_transform_prompt=_require_prompt(
@@ -185,8 +187,11 @@ class Settings:
                 "RAG_ANSWER_SYSTEM_PROMPT",
             ),
             show_sources=os.getenv("SHOW_SOURCES", "false").lower() in ("true", "1", "yes"),
-            ragas_llm_model=os.getenv("MODEL_RAGAS_LLM", "openai/gpt-4o-mini"),
-            ragas_embedding_model=os.getenv(
+            ragas_llm_model=os.getenv("MODEL_RAGAS_LLM", "openai/gpt-oss-20b:free"),
+            ragas_embeddings_provider=_require_choice(
+                "RAGAS_EMBEDDINGS_PROVIDER", "openai", {"openai", "huggingface"},
+            ),
+            ragas_embeddings_model=os.getenv(
                 "MODEL_RAGAS_EMBEDDINGS", "openai/text-embedding-3-small"
             ),
             langfuse_secret_key=os.getenv("LANGFUSE_SECRET_KEY", ""),

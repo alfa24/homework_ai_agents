@@ -338,7 +338,7 @@
 
 | Итерация | Функционал | Статус | Дата |
 |----------|------------|--------|------|
-| 1 | ДЗ-6: Конфиг и зависимости Advanced RAG | ✅ Завершено | 2026-06-10 |
+| 1 | ДЗ-6: Конфиг и зависимости Advanced RAG | ✅ Завершено | 2026-06-10, ревью и фикс по vision.md |
 | 2 | ДЗ-6: Провайдеры embeddings и RAGAS embeddings | ⏳ Не начато | — |
 | 3 | ДЗ-6: Hybrid retrieval Semantic + BM25 | ⏳ Не начато | — |
 | 4 | ДЗ-6: Cross-encoder reranker | ⏳ Не начато | — |
@@ -358,9 +358,9 @@
 **Цель:** подготовить настройки и зависимости для новых retrieval-режимов без изменения поведения по умолчанию.
 
 - [x] Добавить в `pyproject.toml` зависимости: `sentence-transformers`, `rank-bm25`; проверить, что `langchain-community` уже есть
-- [x] Обновить `Settings`: `rag_retrieval_mode`, `semantic_retriever_k`, `bm25_retriever_k`, `hybrid_semantic_weight`, `hybrid_bm25_weight`, `reranker_model`, `reranker_top_n`, `ragas_llm_model`, `ragas_embedding_model`
-- [x] Валидация конфига: режим только `semantic|hybrid|hybrid_rerank`, hybrid-веса положительные, top-K/top-N положительные
-- [x] Обновить `.env.example` с новыми переменными и безопасными дефолтами
+- [x] Обновить `Settings`: `rag_retrieval_mode`, `embeddings_provider`, `semantic_retriever_k`, `bm25_retriever_k`, `hybrid_retriever_k`, `hybrid_semantic_weight`, `hybrid_bm25_weight`, `cross_encoder_model`, `reranker_top_k`, `ragas_llm_model`, `ragas_embeddings_provider`, `ragas_embeddings_model`
+- [x] Валидация конфига: режим только `semantic|hybrid|hybrid_rerank`, провайдеры `openai|huggingface`, hybrid-веса положительные, top-K положительные
+- [x] Обновить `.env.example` с новыми переменными и безопасными дефолтами (приведены к vision.md)
 
 **Как протестировать:**
 - `Settings.load()` проходит с дефолтами из `.env.example`

@@ -37,19 +37,18 @@ class SettingsAdvancedRagTest(unittest.TestCase):
         settings = self._load()
 
         self.assertEqual(settings.rag_retrieval_mode, "semantic")
+        self.assertEqual(settings.embeddings_provider, "openai")
         self.assertEqual(settings.semantic_retriever_k, 4)
-        self.assertEqual(settings.bm25_retriever_k, 4)
+        self.assertEqual(settings.bm25_retriever_k, 8)
+        self.assertEqual(settings.hybrid_retriever_k, 8)
         self.assertEqual(settings.hybrid_semantic_weight, 0.5)
         self.assertEqual(settings.hybrid_bm25_weight, 0.5)
         self.assertEqual(
-            settings.reranker_model, "cross-encoder/ms-marco-MiniLM-L-6-v2"
+            settings.cross_encoder_model,
+            "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
         )
-        self.assertEqual(settings.reranker_top_n, 4)
-
-    def test_legacy_retriever_k_sets_semantic_retriever_k(self) -> None:
-        settings = self._load({"RETRIEVER_K": "3"})
-
-        self.assertEqual(settings.semantic_retriever_k, 3)
+        self.assertEqual(settings.reranker_top_k, 4)
+        self.assertEqual(settings.ragas_embeddings_provider, "openai")
 
     def test_valid_non_default_retrieval_mode_is_loaded(self) -> None:
         settings = self._load({"RAG_RETRIEVAL_MODE": "hybrid_rerank"})
@@ -64,7 +63,7 @@ class SettingsAdvancedRagTest(unittest.TestCase):
         invalid_values = {
             "SEMANTIC_RETRIEVER_K": "0",
             "BM25_RETRIEVER_K": "-1",
-            "RERANKER_TOP_N": "0",
+            "RERANKER_TOP_K": "0",
         }
 
         for name, value in invalid_values.items():
@@ -92,7 +91,7 @@ class SettingsAdvancedRagTest(unittest.TestCase):
         )
 
         self.assertEqual(settings.ragas_llm_model, "openai/ragas-llm")
-        self.assertEqual(settings.ragas_embedding_model, "openai/ragas-embeddings")
+        self.assertEqual(settings.ragas_embeddings_model, "openai/ragas-embeddings")
 
 
 if __name__ == "__main__":
