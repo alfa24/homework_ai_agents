@@ -338,7 +338,7 @@
 
 | Итерация | Функционал | Статус | Дата |
 |----------|------------|--------|------|
-| 1 | ДЗ-6: Конфиг и зависимости Advanced RAG | ⏳ Не начато | — |
+| 1 | ДЗ-6: Конфиг и зависимости Advanced RAG | ✅ Завершено | 2026-06-10 |
 | 2 | ДЗ-6: Провайдеры embeddings и RAGAS embeddings | ⏳ Не начато | — |
 | 3 | ДЗ-6: Hybrid retrieval Semantic + BM25 | ⏳ Не начато | — |
 | 4 | ДЗ-6: Cross-encoder reranker | ⏳ Не начато | — |
@@ -357,10 +357,10 @@
 
 **Цель:** подготовить настройки и зависимости для новых retrieval-режимов без изменения поведения по умолчанию.
 
-- [ ] Добавить в `pyproject.toml` зависимости: `sentence-transformers`, `rank-bm25`; проверить, что `langchain-community` уже есть
-- [ ] Обновить `Settings`: `rag_retrieval_mode`, `embeddings_provider`, `ragas_embeddings_provider`, `model_cross_encoder`, `semantic_retriever_k`, `bm25_retriever_k`, `hybrid_retriever_k`, `hybrid_semantic_weight`, `hybrid_bm25_weight`, `reranker_top_k`, `model_ragas_llm`, `model_ragas_embeddings`
-- [ ] Валидация конфига: режим только `semantic|hybrid|hybrid_rerank`, веса hybrid не отрицательные и не оба нулевые, top-K положительные
-- [ ] Обновить `.env.example` с новыми переменными и безопасными дефолтами
+- [x] Добавить в `pyproject.toml` зависимости: `sentence-transformers`, `rank-bm25`; проверить, что `langchain-community` уже есть
+- [x] Обновить `Settings`: `rag_retrieval_mode`, `semantic_retriever_k`, `bm25_retriever_k`, `hybrid_semantic_weight`, `hybrid_bm25_weight`, `reranker_model`, `reranker_top_n`, `ragas_llm_model`, `ragas_embedding_model`
+- [x] Валидация конфига: режим только `semantic|hybrid|hybrid_rerank`, hybrid-веса положительные, top-K/top-N положительные
+- [x] Обновить `.env.example` с новыми переменными и безопасными дефолтами
 
 **Как протестировать:**
 - `Settings.load()` проходит с дефолтами из `.env.example`
