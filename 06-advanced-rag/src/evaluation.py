@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_openai import ChatOpenAI
 from langfuse import Evaluation, Langfuse
 from ragas.dataset_schema import SingleTurnSample
 from ragas.embeddings.base import LangchainEmbeddingsWrapper
@@ -27,6 +27,7 @@ from ragas.run_config import RunConfig
 from config import Settings
 from dataset_item import ANSWER_KEY, QUESTION_KEY
 from rag.context_retriever import ContextRetriever
+from rag.embeddings_factory import create_embeddings
 from rag_service import RagService
 
 LANGFUSE_DATASET_NAME = "05-rag-qa-dataset"
@@ -103,8 +104,9 @@ class RagEvaluator:
             base_url=self._settings.openai_base_url,
             temperature=0,
         ))
-        ragas_embeddings = LangchainEmbeddingsWrapper(OpenAIEmbeddings(
-            model=self._settings.ragas_embeddings_model,
+        ragas_embeddings = LangchainEmbeddingsWrapper(create_embeddings(
+            self._settings.ragas_embeddings_provider,
+            self._settings.ragas_embeddings_model,
             api_key=self._settings.openai_api_key,
             base_url=self._settings.openai_base_url,
         ))

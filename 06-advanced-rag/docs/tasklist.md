@@ -339,7 +339,7 @@
 | Итерация | Функционал | Статус | Дата |
 |----------|------------|--------|------|
 | 1 | ДЗ-6: Конфиг и зависимости Advanced RAG | ✅ Завершено | 2026-06-10, ревью и фикс по vision.md |
-| 2 | ДЗ-6: Провайдеры embeddings и RAGAS embeddings | ⏳ Не начато | — |
+| 2 | ДЗ-6: Провайдеры embeddings и RAGAS embeddings | ✅ Завершено | 2026-06-10 |
 | 3 | ДЗ-6: Hybrid retrieval Semantic + BM25 | ⏳ Не начато | — |
 | 4 | ДЗ-6: Cross-encoder reranker | ⏳ Не начато | — |
 | 5 | ДЗ-6: Переключение режимов и интеграция LCEL-пайплайна | ⏳ Не начато | — |
@@ -372,11 +372,11 @@
 
 **Цель:** дать возможность выбирать OpenAI/OpenRouter-compatible или HuggingFace embeddings из конфига.
 
-- [ ] Выделить простой компонент/функцию создания embeddings по `EMBEDDINGS_PROVIDER`
-- [ ] Поддержать `openai`: `OpenAIEmbeddings` с `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `MODEL_EMBEDDINGS`
-- [ ] Поддержать `huggingface`: `HuggingFaceEmbeddings` / `sentence-transformers` с `MODEL_EMBEDDINGS`
-- [ ] Аналогично подготовить создание embeddings для RAGAS через `RAGAS_EMBEDDINGS_PROVIDER` и `MODEL_RAGAS_EMBEDDINGS`
-- [ ] Логировать только выбранный провайдер и имя модели, без секретов
+- [x] Выделить простой компонент/функцию создания embeddings по `EMBEDDINGS_PROVIDER`
+- [x] Поддержать `openai`: `OpenAIEmbeddings` с `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `MODEL_EMBEDDINGS`
+- [x] Поддержать `huggingface`: `HuggingFaceEmbeddings` / `sentence-transformers` с `MODEL_EMBEDDINGS`
+- [x] Аналогично подготовить создание embeddings для RAGAS через `RAGAS_EMBEDDINGS_PROVIDER` и `MODEL_RAGAS_EMBEDDINGS`
+- [x] Логировать только выбранный провайдер и имя модели, без секретов
 
 **Как протестировать:**
 - При `EMBEDDINGS_PROVIDER=openai` индекс строится как раньше

@@ -8,7 +8,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiohttp import ClientSession
 from aiohttp_socks import ProxyConnector
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_openai import ChatOpenAI
 from openai import AsyncOpenAI
 
 from audio_converter import AudioConverter
@@ -24,6 +24,7 @@ from rag.document_source import (
     PdfDocumentSource,
     SberbankJsonDocumentSource,
 )
+from rag.embeddings_factory import create_embeddings
 from rag.in_memory_history import InMemoryMessageHistory
 from rag.query_rewriter import QueryRewriter
 from rag_service import RagService
@@ -81,8 +82,9 @@ def _build_service(settings: Settings) -> FinanceService:
 
 
 def _build_rag_service(settings: Settings) -> RagService:
-    embeddings = OpenAIEmbeddings(
-        model=settings.model_embeddings,
+    embeddings = create_embeddings(
+        settings.embeddings_provider,
+        settings.model_embeddings,
         api_key=settings.openai_api_key,
         base_url=settings.openai_base_url,
     )
