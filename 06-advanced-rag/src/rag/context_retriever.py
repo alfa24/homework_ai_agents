@@ -27,6 +27,8 @@ class RetrieverConfig:
     hybrid_k: int
     semantic_weight: float
     bm25_weight: float
+    cross_encoder_model: str = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
+    reranker_top_k: int = 4
 
 
 class ContextRetriever:
@@ -35,13 +37,21 @@ class ContextRetriever:
     def __init__(self, indexer: CorpusIndexer, config: RetrieverConfig) -> None:
         self._indexer = indexer
         self._config = config
+        self._cross_encoder = None
+        if config.mode == HYBRID_RERANK_MODE:
+            from sentence_transformers import CrossEncoder
+            logger.info("Loading cross-encoder: %s", config.cross_encoder_model)
+            self._cross_encoder = CrossEncoder(config.cross_encoder_model)
 
     def retrieve(self, query: str) -> list[Document]:
         try:
             if self._config.mode == SEMANTIC_MODE:
                 chunks = self._semantic_retrieve(query)
+            elif self._config.mode == HYBRID_RERANK_MODE:
+                chunks = self._hybrid_retrieve(query)
+                chunks = self._rerank(query, chunks)
             else:
-                # hybrid и hybrid_rerank используют EnsembleRetriever
+                # hybrid
                 chunks = self._hybrid_retrieve(query)
         except RagError:
             raise
@@ -74,6 +84,18 @@ class ContextRetriever:
         results = ensemble.invoke(query)
         # Ограничиваем финальный список hybrid_k документами
         return results[: self._config.hybrid_k]
+
+    def _rerank(self, query: str, documents: list[Document]) -> list[Document]:
+        if not documents:
+            return []
+        try:
+            pairs = [(query, doc.page_content) for doc in documents]
+            scores = self._cross_encoder.predict(pairs)
+            ranked = sorted(zip(documents, scores), key=lambda x: x[1], reverse=True)
+            return [doc for doc, _ in ranked[: self._config.reranker_top_k]]
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Cross-encoder reranking failed")
+            raise RagError("Ошибка reranking. Подробности в логах.") from exc
 
     @staticmethod
     def format(chunks: list[Document]) -> str:

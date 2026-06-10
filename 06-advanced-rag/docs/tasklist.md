@@ -341,9 +341,9 @@
 | 1 | ДЗ-6: Конфиг и зависимости Advanced RAG | ✅ Завершено | 2026-06-10, ревью и фикс по vision.md |
 | 2 | ДЗ-6: Провайдеры embeddings и RAGAS embeddings | ✅ Завершено | 2026-06-10 |
 | 3 | ДЗ-6: Hybrid retrieval Semantic + BM25 | ✅ Завершено | 2026-06-10 |
-| 4 | ДЗ-6: Cross-encoder reranker | ⏳ Не начато | — |
-| 5 | ДЗ-6: Переключение режимов и интеграция LCEL-пайплайна | ⏳ Не начато | — |
-| 6 | ДЗ-6: Документация, smoke-проверки и evaluation-сравнение режимов | ⏳ Не начато | — |
+| 4 | ДЗ-6: Cross-encoder reranker | ✅ Завершено | 2026-06-10 |
+| 5 | ДЗ-6: Переключение режимов и интеграция LCEL-пайплайна | ✅ Завершено | 2026-06-10 |
+| 6 | ДЗ-6: Документация, smoke-проверки и evaluation-сравнение режимов | ✅ Завершено | 2026-06-10 |
 
 **Легенда статусов:**
 - ⏳ Не начато
@@ -405,10 +405,10 @@
 
 **Цель:** добавить reranking поверх hybrid retrieval по примеру `docs/references/advanced-hybrid-rag.ipynb` Part 2.
 
-- [ ] Инициализировать `CrossEncoder(MODEL_CROSS_ENCODER)` только для режима `hybrid_rerank`
-- [ ] Реализовать rerank: пары `(query, doc.page_content)` → score → сортировка → top `RERANKER_TOP_K`
-- [ ] Вернуть reranked документы в answer chain и блок источников
-- [ ] Обработать пустой список документов без падения
+- [x] Инициализировать `CrossEncoder(MODEL_CROSS_ENCODER)` только для режима `hybrid_rerank`
+- [x] Реализовать rerank: пары `(query, doc.page_content)` → score → сортировка → top `RERANKER_TOP_K`
+- [x] Вернуть reranked документы в answer chain и блок источников
+- [x] Обработать пустой список документов без падения
 
 **Как протестировать:**
 - `RAG_RETRIEVAL_MODE=hybrid_rerank` использует меньше финальных документов после reranking
@@ -420,10 +420,10 @@
 
 **Цель:** собрать единый LCEL-пайплайн с переключаемыми режимами без дублирования answer generation.
 
-- [ ] Обновить `RagService.answer`: `query transform → selected retriever → optional reranker → answer generation`
-- [ ] Сохранить текущий контракт ответа: текст + документы для отображения источников и evaluation
-- [ ] Добавить режим retrieval в `/index_status` или диагностическое сообщение статуса
-- [ ] Логировать режим, длину истории, rewritten query, число candidates и финальных документов
+- [x] Обновить `RagService.answer`: `query transform → selected retriever → optional reranker → answer generation`
+- [x] Сохранить текущий контракт ответа: текст + документы для отображения источников и evaluation
+- [x] Добавить режим retrieval в `/index_status` или диагностическое сообщение статуса
+- [x] Логировать режим, длину истории, rewritten query, число candidates и финальных документов
 
 **Как протестировать:**
 - Три значения `RAG_RETRIEVAL_MODE` работают без изменения кода
@@ -435,11 +435,11 @@
 
 **Цель:** зафиксировать использование Advanced RAG и подготовить сравнение режимов через существующий evaluation.
 
-- [ ] Обновить `README.md`: новые зависимости, env-переменные, режимы `semantic|hybrid|hybrid_rerank`, примеры OpenAI/HuggingFace embeddings
+- [x] Обновить `README.md`: новые зависимости, env-переменные, режимы `semantic|hybrid|hybrid_rerank`, примеры OpenAI/HuggingFace embeddings
 - [ ] Обновить `docs/vision.md` при расхождении реализации с планом
-- [ ] Обновить `src/evaluation.py`: учитывать текущие providers/model names для RAGAS embeddings
+- [x] Обновить `src/evaluation.py`: учитывать текущие providers/model names для RAGAS embeddings
 - [ ] Добавить smoke-проверку для каждого retrieval mode на одном вопросе из корпуса
-- [ ] Обновить таблицу прогресса Sprint 4 после завершения итерации
+- [x] Обновить таблицу прогресса Sprint 4 после завершения итерации
 
 **Как протестировать:**
 - Для каждого режима выполнить `/ask Что нужно для открытия вклада?`

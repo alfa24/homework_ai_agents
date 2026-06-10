@@ -110,6 +110,7 @@ def _build_rag_service(settings: Settings) -> RagService:
         rewriter=QueryRewriter(
             llm=llm, instruction=settings.query_transform_prompt
         ),
+        retrieval_mode=settings.rag_retrieval_mode,
         retriever=ContextRetriever(
             indexer=indexer,
             config=RetrieverConfig(
@@ -119,6 +120,8 @@ def _build_rag_service(settings: Settings) -> RagService:
                 hybrid_k=settings.hybrid_retriever_k,
                 semantic_weight=settings.hybrid_semantic_weight,
                 bm25_weight=settings.hybrid_bm25_weight,
+                cross_encoder_model=settings.cross_encoder_model,
+                reranker_top_k=settings.reranker_top_k,
             ),
         ),
         generator=AnswerGenerator(
